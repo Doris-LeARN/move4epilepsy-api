@@ -17,7 +17,9 @@ class PatientTreatmentCreate(BaseModel):
     dosage: str
     frequency: str
     treatment_duration: Optional[int] = None  # Durée en mois (calculée)
-    treatment_periods: Optional[Any] = None  # JSONB - Accepte liste ou objet avec periods/metadata
+    treatment_start_date: Optional[datetime] = None  # Début du traitement
+    treatment_end_date: Optional[datetime] = None  # Fin du traitement
+    treatment_is_ongoing: Optional[bool] = False  # Traitement en cours
     monthly_cost: Optional[str] = None
     unit_price: Optional[str] = None
     access_ease: str  # NOT NULL
@@ -77,7 +79,9 @@ class PatientTreatmentResponse(BaseModel):
     dosage: str
     frequency: str
     treatment_duration: Optional[int] = None  # Durée en mois (calculée)
-    treatment_periods: Optional[Any] = None  # JSONB - Accepte liste ou objet avec periods/metadata
+    treatment_start_date: Optional[datetime] = None  # Début du traitement
+    treatment_end_date: Optional[datetime] = None  # Fin du traitement
+    treatment_is_ongoing: Optional[bool] = None  # Traitement en cours
     monthly_cost: Optional[str] = None
     unit_price: Optional[str] = None
     access_ease: str

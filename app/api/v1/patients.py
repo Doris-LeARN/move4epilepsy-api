@@ -26,81 +26,25 @@ async def create_treatment(
     Crée un traitement patient - Correspond à Supabase
     Peut être anonyme (si current_user est None)
     """
-    # Créer le traitement avec treatment_duration en mois et treatment_periods en datetime
     from datetime import datetime
-    
-    # Vérifier que treatment_duration est bien un nombre (mois)
+
     treatment_duration_months = treatment_data.treatment_duration
-    if treatment_duration_months is not None:
-        if not isinstance(treatment_duration_months, int):
-            try:
-                treatment_duration_months = int(treatment_duration_months)
-            except (ValueError, TypeError):
-                print(f"⚠️ WARNING: treatment_duration n'est pas un nombre: {treatment_duration_months}")
-                treatment_duration_months = None
-    
-    # Traiter treatment_periods (liste avec dates datetime ISO)
-    treatment_periods_json = None
-    if treatment_data.treatment_periods:
-        if isinstance(treatment_data.treatment_periods, list):
-            # Format attendu: liste avec start_date, end_date en datetime ISO
-            treatment_periods_json = treatment_data.treatment_periods
-            print(f"✅ Format traitement_periods: {len(treatment_periods_json)} périodes avec dates datetime")
-            if treatment_periods_json and len(treatment_periods_json) > 0:
-                first_period = treatment_periods_json[0]
-                print(f"  - Première période: start_date={first_period.get('start_date')}, end_date={first_period.get('end_date')}")
-        elif isinstance(treatment_data.treatment_periods, dict) and 'periods' in treatment_data.treatment_periods:
-            # Ancien format avec periods/metadata - extraire juste les périodes
-            treatment_periods_json = treatment_data.treatment_periods.get('periods', [])
-            print(f"⚠️ Ancien format détecté, extraction des périodes: {len(treatment_periods_json)} périodes")
-        else:
-            # Format inconnu, utiliser tel quel
-            treatment_periods_json = treatment_data.treatment_periods
-    
-    # Si treatment_duration est vide/null mais qu'on a des périodes, le calculer depuis les périodes
-    if treatment_duration_months is None and treatment_periods_json and len(treatment_periods_json) > 0:
-        # Calculer la durée totale en mois depuis les dates
+    if treatment_duration_months is not None and not isinstance(treatment_duration_months, int):
         try:
-            earliest_start = None
-            latest_end = None
-            
-            for period in treatment_periods_json:
-                start_date_str = period.get('start_date') or period.get('startDateISO')
-                end_date_str = period.get('end_date') or period.get('endDateISO')
-                
-                if start_date_str:
-                    start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
-                    if not earliest_start or start_date < earliest_start:
-                        earliest_start = start_date
-                
-                if end_date_str:
-                    end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
-                    if not latest_end or end_date > latest_end:
-                        latest_end = end_date
-                elif period.get('is_ongoing') or period.get('isOngoing'):
-                    # Traitement en cours, utiliser maintenant
-                    latest_end = datetime.now()
-            
-            if earliest_start and latest_end:
-                years_diff = latest_end.year - earliest_start.year
-                months_diff = latest_end.month - earliest_start.month
-                treatment_duration_months = years_diff * 12 + months_diff + 1  # +1 pour inclure le mois de début et de fin
-                print(f"✅ treatment_duration calculé depuis les périodes: {treatment_duration_months} mois")
-        except Exception as e:
-            print(f"⚠️ Erreur lors du calcul de treatment_duration: {e}")
-    
-    # Logs de débogage pour vérifier les valeurs calculées
-    print(f"📊 Données reçues pour traitement:")
-    print(f"  - treatment_duration: {treatment_duration_months} mois (type: {type(treatment_duration_months).__name__})")
-    print(f"  - treatment_periods: {type(treatment_periods_json).__name__}")
-    if treatment_periods_json and isinstance(treatment_periods_json, list):
-        print(f"    - {len(treatment_periods_json)} périodes")
-        if treatment_periods_json:
-            first_period = treatment_periods_json[0]
-            print(f"    - Première période:")
-            print(f"      - start_date: {first_period.get('start_date')}")
-            print(f"      - end_date: {first_period.get('end_date')}")
-    
+            treatment_duration_months = int(treatment_duration_months)
+        except (ValueError, TypeError):
+            treatment_duration_months = None
+
+    start_dt = treatment_data.treatment_start_date
+    end_dt = treatment_data.treatment_end_date
+    is_ongoing = treatment_data.treatment_is_ongoing or False
+    if treatment_duration_months is None and start_dt and (end_dt or is_ongoing):
+        try:
+            latest = end_dt if end_dt else (datetime.now(start_dt.tzinfo) if getattr(start_dt, "tzinfo", None) else datetime.now())
+            treatment_duration_months = max(1, (latest.year - start_dt.year) * 12 + (latest.month - start_dt.month) + 1)
+        except Exception:
+            pass
+
     treatment = PatientTreatment(
         name=treatment_data.name or "",
         age=treatment_data.age,
@@ -109,8 +53,10 @@ async def create_treatment(
         medication_name=treatment_data.medication_name,
         dosage=treatment_data.dosage,
         frequency=treatment_data.frequency,
-        treatment_duration=treatment_duration_months,  # Nombre de mois (entier)
-        treatment_periods=treatment_periods_json,        # JSONB avec dates datetime ISO
+        treatment_duration=treatment_duration_months,
+        treatment_start_date=start_dt,
+        treatment_end_date=end_dt,
+        treatment_is_ongoing=is_ongoing,
         monthly_cost=treatment_data.monthly_cost,
         unit_price=treatment_data.unit_price,
         access_ease=treatment_data.access_ease,
@@ -254,14 +200,7 @@ async def update_treatment(
     # Pour l'instant, on permet la modification à tous les authentifiés
     # TODO: Implémenter la logique RLS exacte
     
-    # Mettre à jour
-    import json
     update_data = treatment_data.model_dump(exclude_unset=True)
-    
-    # Traiter treatment_periods pour JSONB
-    if "treatment_periods" in update_data and update_data["treatment_periods"]:
-        update_data["treatment_periods"] = update_data["treatment_periods"]
-    
     for field, value in update_data.items():
         if hasattr(treatment, field):
             setattr(treatment, field, value)

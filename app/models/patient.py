@@ -2,7 +2,7 @@
 Modèles Patient
 """
 from sqlalchemy import Column, String, Boolean, DateTime, Integer, ForeignKey, Text, Numeric
-from sqlalchemy.dialects.postgresql import UUID, INET, JSONB, JSONB
+from sqlalchemy.dialects.postgresql import UUID, INET, JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import uuid
@@ -63,7 +63,9 @@ class PatientTreatment(Base):
     dosage = Column(String, nullable=False)
     frequency = Column(String, nullable=False)
     treatment_duration = Column(Integer, nullable=True)  # Durée en mois (calculée)
-    treatment_periods = Column(JSONB, default=list, nullable=True)  # JSONB avec dates datetime ISO
+    treatment_start_date = Column(DateTime(timezone=True), nullable=True)  # Début du traitement
+    treatment_end_date = Column(DateTime(timezone=True), nullable=True)  # Fin du traitement
+    treatment_is_ongoing = Column(Boolean, default=False, nullable=True)  # Traitement en cours
     monthly_cost = Column(String, nullable=True)  # Nullable après migration
     unit_price = Column(String, nullable=True)
     access_ease = Column(String, nullable=False)  # NOT NULL dans Supabase originale
