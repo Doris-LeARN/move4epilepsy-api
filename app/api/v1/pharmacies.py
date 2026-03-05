@@ -42,6 +42,64 @@ async def get_pharmacies(
     return pharmacies
 
 
+@router.get("/public/pharmacies-with-stocks", response_model=List[PharmacyWithStocks])
+async def get_public_pharmacies_with_stocks(
+    cities: Optional[str] = Query(None, description="Villes séparées par des virgules"),
+    db: Session = Depends(get_db)
+):
+    """
+    Récupère les pharmacies publiques avec leurs stocks.
+    Déclaré avant /{pharmacy_id} pour que la route soit bien prise en compte.
+    """
+    query = db.query(Pharmacy).filter(Pharmacy.active == True)
+
+    if cities:
+        city_list = [c.strip() for c in cities.split(",")]
+        query = query.filter(Pharmacy.city.in_(city_list))
+
+    pharmacies = query.options(joinedload(Pharmacy.stocks)).all()
+
+    result = []
+    for pharmacy in pharmacies:
+        stocks_data = [
+            StockResponse(
+                id=stock.id,
+                pharmacy_id=stock.pharmacy_id,
+                medication_id=stock.medication_id,
+                quantity=stock.quantity,
+                is_rupture=stock.is_rupture,
+                last_update=stock.last_update,
+                created_at=stock.created_at,
+            )
+            for stock in pharmacy.stocks
+        ]
+        pharmacy_data = PharmacyResponse(
+            id=pharmacy.id,
+            pharmacy_id=pharmacy.pharmacy_id,
+            name=pharmacy.name,
+            license_number=pharmacy.license_number,
+            email=pharmacy.email,
+            phone=pharmacy.phone,
+            address=pharmacy.address,
+            city=pharmacy.city,
+            postal_code=pharmacy.postal_code,
+            country=pharmacy.country,
+            department=pharmacy.department,
+            commune=pharmacy.commune,
+            arrondissement=pharmacy.arrondissement,
+            quartier=pharmacy.quartier,
+            responsible_first_name=pharmacy.responsible_first_name,
+            responsible_last_name=pharmacy.responsible_last_name,
+            user_id=pharmacy.user_id,
+            active=pharmacy.active,
+            created_at=pharmacy.created_at,
+            updated_at=pharmacy.updated_at,
+        )
+        result.append(PharmacyWithStocks(**pharmacy_data.model_dump(), stocks=stocks_data))
+
+    return result
+
+
 @router.get("/{pharmacy_id}", response_model=PharmacyResponse)
 async def get_pharmacy(
     pharmacy_id: UUID,
@@ -142,64 +200,3 @@ async def create_or_update_stock(
         db.commit()
         db.refresh(new_stock)
         return new_stock
-
-
-@router.get("/public/pharmacies-with-stocks", response_model=List[PharmacyWithStocks])
-async def get_public_pharmacies_with_stocks(
-    cities: Optional[str] = Query(None, description="Villes séparées par des virgules"),
-    db: Session = Depends(get_db)
-):
-    """
-    Récupère les pharmacies publiques avec leurs stocks
-    Pour la démo et la recherche publique
-    """
-    query = db.query(Pharmacy).filter(Pharmacy.active == True)
-    
-    if cities:
-        city_list = [c.strip() for c in cities.split(",")]
-        query = query.filter(Pharmacy.city.in_(city_list))
-    
-    pharmacies = query.options(joinedload(Pharmacy.stocks)).all()
-    
-    result = []
-    for pharmacy in pharmacies:
-        # Filtrer les stocks pour ne garder que ceux avec quantité > 0 ou rupture
-        stocks_data = [
-            StockResponse(
-                id=stock.id,
-                pharmacy_id=stock.pharmacy_id,
-                medication_id=stock.medication_id,
-                quantity=stock.quantity,
-                is_rupture=stock.is_rupture,
-                last_update=stock.last_update,
-                created_at=stock.created_at,
-            )
-            for stock in pharmacy.stocks
-        ]
-        
-        pharmacy_data = PharmacyResponse(
-            id=pharmacy.id,
-            pharmacy_id=pharmacy.pharmacy_id,
-            name=pharmacy.name,
-            license_number=pharmacy.license_number,
-            email=pharmacy.email,
-            phone=pharmacy.phone,
-            address=pharmacy.address,
-            city=pharmacy.city,
-            postal_code=pharmacy.postal_code,
-            country=pharmacy.country,
-            department=pharmacy.department,
-            commune=pharmacy.commune,
-            arrondissement=pharmacy.arrondissement,
-            quartier=pharmacy.quartier,
-            responsible_first_name=pharmacy.responsible_first_name,
-            responsible_last_name=pharmacy.responsible_last_name,
-            user_id=pharmacy.user_id,
-            active=pharmacy.active,
-            created_at=pharmacy.created_at,
-            updated_at=pharmacy.updated_at,
-        )
-        
-        result.append(PharmacyWithStocks(**pharmacy_data.model_dump(), stocks=stocks_data))
-    
-    return result
