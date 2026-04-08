@@ -35,8 +35,9 @@ class ChatMessageBase(BaseModel):
 
 
 class ChatMessageCreate(ChatMessageBase):
-    """Schéma pour la création d'un message"""
-    channel_id: UUID
+    """Corps POST /channels/{channel_id}/messages (le canal est dans l'URL)."""
+
+    pass
 
 
 class ChatMessageResponse(BaseModel):

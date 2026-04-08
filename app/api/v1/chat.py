@@ -1,11 +1,11 @@
 """
 Endpoints pour le chat communautaire
 """
-from fastapi import APIRouter, HTTPException, Depends, Query, status
-from sqlalchemy.orm import Session, joinedload
+from fastapi import APIRouter, HTTPException, Depends, Query, status, WebSocket, WebSocketDisconnect
+from sqlalchemy.orm import Session
 from typing import List, Optional
 from uuid import UUID
-from app.database.base import get_db
+from app.database.base import get_db, SessionLocal
 from app.models.chat import ChatChannel, ChatMessage, MessageReport
 from app.models.user import User, UserProfile
 from app.schemas.chat import (
@@ -13,10 +13,32 @@ from app.schemas.chat import (
     ChatMessageResponse, ChatMessageCreate,
     MessageReportCreate, MessageReportResponse
 )
-from app.core.dependencies import get_current_user, get_current_user_optional
+from app.core.dependencies import get_current_user, get_current_user_optional, get_user_by_username
 from app.core.permissions import require_admin
+from app.core.security import decode_access_token
+from app.core.chat_connection_manager import chat_connection_manager
 
 router = APIRouter()
+
+
+def _build_chat_message_response(db: Session, message: ChatMessage) -> ChatMessageResponse:
+    profile = None
+    if message.user_id:
+        profile = db.query(UserProfile).filter(UserProfile.user_id == message.user_id).first()
+    pseudonym = profile.username if profile else "Anonyme"
+    user_role = profile.role if profile else None
+    return ChatMessageResponse(
+        id=message.id,
+        channel_id=message.channel_id,
+        user_id=message.user_id,
+        content=message.content,
+        is_deleted=message.is_deleted,
+        is_reported=message.is_reported,
+        created_at=message.created_at,
+        pseudonym=pseudonym,
+        user_role=user_role,
+        show_role=True,
+    )
 
 
 @router.get("/channels", response_model=List[ChatChannelResponse])
@@ -74,32 +96,7 @@ async def get_messages(
         ChatMessage.is_deleted == False
     ).order_by(ChatMessage.created_at.desc()).offset(skip).limit(limit).all()
     
-    # Enrichir avec les pseudonymes
-    result = []
-    for msg in messages:
-        pseudonym = None
-        user_role = None
-        
-        if msg.user_id:
-            profile = db.query(UserProfile).filter(UserProfile.user_id == msg.user_id).first()
-            if profile:
-                pseudonym = profile.username
-                user_role = profile.role
-        
-        result.append(ChatMessageResponse(
-            id=msg.id,
-            channel_id=msg.channel_id,
-            user_id=msg.user_id,
-            content=msg.content,
-            is_deleted=msg.is_deleted,
-            is_reported=msg.is_reported,
-            created_at=msg.created_at,
-            pseudonym=pseudonym or "Anonyme",
-            user_role=user_role,
-            show_role=True,
-        ))
-    
-    # Inverser pour avoir les plus anciens en premier
+    result = [_build_chat_message_response(db, msg) for msg in messages]
     return list(reversed(result))
 
 
@@ -135,24 +132,13 @@ async def send_message(
     db.add(message)
     db.commit()
     db.refresh(message)
-    
-    # Récupérer le pseudonyme
-    profile = db.query(UserProfile).filter(UserProfile.user_id == current_user.id).first()
-    pseudonym = profile.username if profile else "Anonyme"
-    user_role = profile.role if profile else None
-    
-    return ChatMessageResponse(
-        id=message.id,
-        channel_id=message.channel_id,
-        user_id=message.user_id,
-        content=message.content,
-        is_deleted=message.is_deleted,
-        is_reported=message.is_reported,
-        created_at=message.created_at,
-        pseudonym=pseudonym,
-        user_role=user_role,
-        show_role=True,
+
+    response = _build_chat_message_response(db, message)
+    await chat_connection_manager.broadcast_json(
+        str(channel_id),
+        {"type": "new_message", "payload": response.model_dump(mode="json")},
     )
+    return response
 
 
 @router.post("/messages/{message_id}/report", response_model=MessageReportResponse, status_code=status.HTTP_201_CREATED)
@@ -233,3 +219,51 @@ async def create_channel(
     db.refresh(channel)
     
     return channel
+
+
+@router.websocket("/ws/{channel_id}")
+async def chat_websocket(
+    websocket: WebSocket,
+    channel_id: UUID,
+    token: Optional[str] = Query(None),
+):
+    """
+    WebSocket temps réel pour un canal. Authentification : query `token` (JWT).
+    Les messages sont poussés au format JSON : {"type":"new_message","payload":{...}}.
+    """
+    joined = False
+    db = SessionLocal()
+    try:
+        if not token:
+            await websocket.close(code=1008)
+            return
+        payload = decode_access_token(token)
+        if not payload:
+            await websocket.close(code=1008)
+            return
+        username = payload.get("sub")
+        if not username:
+            await websocket.close(code=1008)
+            return
+        user = get_user_by_username(db, username)
+        if not user:
+            await websocket.close(code=1008)
+            return
+        channel = db.query(ChatChannel).filter(
+            ChatChannel.id == channel_id,
+            ChatChannel.is_active == True,
+        ).first()
+        if not channel:
+            await websocket.close(code=1008)
+            return
+        await chat_connection_manager.connect(str(channel_id), websocket)
+        joined = True
+        try:
+            while True:
+                await websocket.receive_text()
+        except WebSocketDisconnect:
+            pass
+    finally:
+        if joined:
+            await chat_connection_manager.disconnect(str(channel_id), websocket)
+        db.close()
