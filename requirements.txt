@@ -17,3 +17,18 @@ supabase==2.3.4
 
 # HTTP client pour proxy externe
 httpx==0.25.2
+
+# Sécurité & Rate Limiting
+slowapi==0.1.9
+python-dotenv==1.0.1
+
+# Logging structuré
+structlog==24.1.0
+
+# Validation supplémentaire
+validators==0.28.0
+
+# Tests
+pytest==7.4.4
+pytest-asyncio==0.23.3
+pytest-cov==4.1.0
