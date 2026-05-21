@@ -1,7 +1,7 @@
 """
 Endpoints d'authentification
 """
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, status, Response, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from typing import Optional, Union
@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.core.security import verify_password, get_password_hash, create_access_token, decode_access_token
 from app.core.permissions import require_admin
 from app.core.dependencies import oauth2_scheme, optional_bearer, get_current_user, get_current_user_optional, get_current_user_required
+from app.core.rate_limiter import limiter
 from app.database.base import get_db
 from app.models.user import User, UserProfile
 from app.schemas.user import UserCreate, UserResponse, UserProfileCreate, UserProfileResponse
@@ -53,7 +54,12 @@ def create_user(db: Session, user_data: UserCreate) -> User:
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def register(user_data: UserCreate, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")  # Rate limiting sur l'inscription
+async def register(
+    request: Request,
+    user_data: UserCreate,
+    db: Session = Depends(get_db)
+):
     """Enregistre un nouvel utilisateur"""
     # Vérifier si l'utilisateur existe déjà
     if get_user_by_username(db, user_data.username):
@@ -83,12 +89,15 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
     return user
 
 
-@router.post("/login", response_model=Token)
+@router.post("/login", response_model=dict)
+@limiter.limit("5/minute")  # Rate limiting sur le login
 async def login(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
+    response: Response = None,  # Pour set_cookie
     db: Session = Depends(get_db)
 ):
-    """Connecte un utilisateur et retourne un token"""
+    """Connecte un utilisateur et retourne un HttpOnly cookie"""
     user = get_user_by_username(db, form_data.username)
     
     if not user:
@@ -116,7 +125,30 @@ async def login(
         data={"sub": user.username}, expires_delta=access_token_expires
     )
     
-    return {"access_token": access_token, "token_type": "bearer"}
+    # ✅ HttpOnly Cookie (sécurisé contre XSS)
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,  # ← JavaScript NE PEUT PAS accéder
+        secure=settings.ENVIRONMENT == "production",  # HTTPS en prod
+        samesite="strict",  # Protection CSRF
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,  # Expiration
+        path="/api",  # Limiter au chemin API
+    )
+    
+    return {"message": "Login successful", "user_id": str(user.id)}
+
+
+@router.post("/logout")
+async def logout(response: Response):
+    """Déconnecte l'utilisateur en supprimant le cookie HttpOnly"""
+    response.delete_cookie(
+        key="access_token",
+        path="/api",
+        secure=settings.ENVIRONMENT == "production",
+        samesite="strict",
+    )
+    return {"message": "Logout successful"}
 
 
 @router.get("/me", response_model=UserResponse)

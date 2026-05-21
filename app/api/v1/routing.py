@@ -19,7 +19,16 @@ except ImportError:
 router = APIRouter()
 
 # Clé API OpenRouteService depuis les variables d'environnement
-OPENROUTESERVICE_API_KEY = os.getenv("OPENROUTESERVICE_API_KEY", "5b3ce3597851110001cf6248e8c8e8c8b8c8e8c8b8c8e8c8b8c8e8c8b")
+# ⚠️ CRITIQUE: Ne JAMAIS utiliser de valeur par défaut exposée
+OPENROUTESERVICE_API_KEY = os.getenv("OPENROUTESERVICE_API_KEY")
+
+if not OPENROUTESERVICE_API_KEY:
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.warning(
+        "⚠️ OPENROUTESERVICE_API_KEY not set. Routing will use Haversine fallback only. "
+        "Set OPENROUTESERVICE_API_KEY in .env for full routing capabilities."
+    )
 
 
 @router.get("/directions/driving-car")
@@ -53,8 +62,8 @@ async def get_directions(
             detail=f"Format de coordonnées invalide. Attendu: 'lng,lat'. Erreur: {str(e)}"
         )
     
-    # Essayer d'abord avec OpenRouteService si httpx est disponible
-    if httpx is not None:
+    # Essayer d'abord avec OpenRouteService si httpx est disponible et la clé est configurée
+    if httpx is not None and OPENROUTESERVICE_API_KEY:
         try:
             # Construire l'URL de l'API OpenRouteService
             url = f"https://api.openrouteservice.org/v2/directions/driving-car"

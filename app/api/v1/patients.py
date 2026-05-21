@@ -106,24 +106,19 @@ async def get_treatments(
     limit: int = Query(100, ge=1, le=1000),
     medication_name: Optional[str] = Query(None),
     location: Optional[str] = Query(None),
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
+    _: None = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """
-    Récupère les traitements - Correspond à Supabase
-    - Médecin/Admin : voit tous les traitements
-    - Autres : accès restreint selon RLS Supabase
+    Récupère les traitements - ADMIN UNIQUEMENT
+    
+    Design d'anonymat:
+    - POST /treatments: Anonyme (n'importe qui)
+    - GET /treatments: ADMIN SEULEMENT (protection anonymat)
+    - Seul l'administrateur général peut consulter les traitements
     """
     query = db.query(PatientTreatment)
-    
-    # Vérifier les permissions
-    user_role = None
-    if current_user and current_user.profile:
-        user_role = current_user.profile.role
-    
-    # Dans Supabase, seuls les admins/médecins peuvent lire (selon RLS)
-    # Pour l'instant, on permet la lecture à tous les authentifiés
-    # TODO: Implémenter la logique RLS exacte
     
     if medication_name:
         query = query.filter(PatientTreatment.medication_name.ilike(f"%{medication_name}%"))
@@ -161,10 +156,11 @@ async def get_treatment_stats(
 @router.get("/treatments/{treatment_id}", response_model=PatientTreatmentResponse)
 async def get_treatment(
     treatment_id: UUID,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
+    _: None = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
-    """Récupère un traitement par son ID - Correspond à Supabase"""
+    """Récupère un traitement par son ID - ADMIN SEULEMENT"""
     treatment = db.query(PatientTreatment).filter(PatientTreatment.id == treatment_id).first()
     
     if not treatment:
@@ -172,10 +168,6 @@ async def get_treatment(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Treatment not found"
         )
-    
-    # Dans Supabase, seuls les admins/médecins peuvent lire (selon RLS)
-    # Pour l'instant, on permet la lecture à tous les authentifiés
-    # TODO: Implémenter la logique RLS exacte
     
     return treatment
 
@@ -184,10 +176,11 @@ async def get_treatment(
 async def update_treatment(
     treatment_id: UUID,
     treatment_data: PatientTreatmentCreate,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
+    _: None = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
-    """Met à jour un traitement - Correspond à Supabase"""
+    """Met à jour un traitement - ADMIN SEULEMENT"""
     treatment = db.query(PatientTreatment).filter(PatientTreatment.id == treatment_id).first()
     
     if not treatment:
@@ -195,10 +188,6 @@ async def update_treatment(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Treatment not found"
         )
-    
-    # Dans Supabase, seuls les admins peuvent modifier (selon RLS)
-    # Pour l'instant, on permet la modification à tous les authentifiés
-    # TODO: Implémenter la logique RLS exacte
     
     update_data = treatment_data.model_dump(exclude_unset=True)
     for field, value in update_data.items():

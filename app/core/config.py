@@ -33,7 +33,7 @@ class Settings(BaseSettings):
         return v
     
     # Sécurité - OBLIGATOIRE en production
-    SECRET_KEY: str = Field(default_factory=lambda: os.getenv("SECRET_KEY", ""))
+    SECRET_KEY: str = Field(default="")
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
@@ -43,7 +43,37 @@ class Settings(BaseSettings):
     RATE_LIMIT_PERIOD: int = 60  # secondes
     
     # Base de données PostgreSQL
-    DATABASE_URL: str = Field(default="postgresql://postgres:postgres@localhost:5432/move4epilepsy")
+    DATABASE_URL: str = Field(default="")
+    
+    @field_validator("SECRET_KEY")
+    @classmethod
+    def secret_key_must_be_set(cls, v: str) -> str:
+        """SECRET_KEY doit être explicitement configuré via .env"""
+        if not v or v == "change-me-in-production-use-env-variable":
+            raise ValueError(
+                "🔴 ERREUR CRITIQUE: SECRET_KEY must be explicitly set via environment variable (.env). "
+                "Ne pas committer la valeur par défaut!"
+            )
+        if len(v) < 32:
+            raise ValueError(
+                "🔴 ERREUR: SECRET_KEY must be at least 32 characters for security"
+            )
+        return v
+    
+    @field_validator("DATABASE_URL")
+    @classmethod
+    def database_url_must_be_set(cls, v: str) -> str:
+        """DATABASE_URL doit être explicitement configuré via .env"""
+        if not v or v == "postgresql://postgres:postgres@localhost:5432/move4epilepsy":
+            raise ValueError(
+                "🔴 ERREUR CRITIQUE: DATABASE_URL must be explicitly set via environment variable (.env). "
+                "Never commit default credentials!"
+            )
+        if not v.startswith(("postgresql://", "postgres://")):
+            raise ValueError(
+                "🔴 ERREUR: DATABASE_URL must start with postgresql:// or postgres://"
+            )
+        return v
     
     # Environnement
     ENVIRONMENT: str = "development"
