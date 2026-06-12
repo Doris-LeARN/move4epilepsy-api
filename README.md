@@ -38,6 +38,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 L'API sera accessible sur :
+
 - **API** : http://localhost:8000
 - **Documentation Swagger** : http://localhost:8000/docs
 - **Documentation ReDoc** : http://localhost:8000/redoc
@@ -57,6 +58,7 @@ python scripts/create_test_users.py
 ## 📋 Endpoints Disponibles
 
 ### Authentification
+
 - `POST /api/v1/auth/register` - Enregistrer un nouvel utilisateur
 - `POST /api/v1/auth/login` - Se connecter
 - `GET /api/v1/auth/me` - Obtenir les informations de l'utilisateur actuel
@@ -64,6 +66,7 @@ python scripts/create_test_users.py
 - `POST /api/v1/auth/create-test-users` - Créer des utilisateurs de test (admin uniquement)
 
 **Alternative : Script Python** (recommandé pour le développement)
+
 ```bash
 python scripts/create_test_users.py
 ```
@@ -90,6 +93,7 @@ Les tables sont créées automatiquement au démarrage. Modèles inclus :
 ## 🔧 Configuration
 
 Le fichier `.env` doit contenir :
+
 ```env
 DATABASE_URL=postgresql://username:password@localhost:5432/move4epilepsy
 ```
