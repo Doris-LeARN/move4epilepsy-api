@@ -1,4 +1,4 @@
-# 🐳 Docker Setup - Move4Epilepsy API
+# Docker Setup - Move4Epilepsy API
 
 Guide complet pour lancer l'API avec Docker et Docker Compose.
 
@@ -9,6 +9,7 @@ Guide complet pour lancer l'API avec Docker et Docker Compose.
 - **Docker** >= 20.10
 - **Docker Compose** >= 2.0
 - **Git**
+- **PostgreSQL** en cours d'exécution localement ou sur un serveur distant
 
 ### Installation
 
@@ -43,8 +44,21 @@ cp .env.example .env
 # Générer une SECRET_KEY forte
 python -c "import secrets; print(secrets.token_urlsafe(32))"
 
-# Éditer .env et coller la clé générée
+# Éditer .env et renseigner les variables (clé secrète + DATABASE_URL)
 nano .env  # ou ton éditeur
+```
+
+La variable `DATABASE_URL` doit pointer vers ta base PostgreSQL externe :
+
+```env
+# Base locale (accès depuis Docker Desktop sur Mac/Windows)
+DATABASE_URL=postgresql://user:password@host.docker.internal:5432/move4epilepsy
+
+# Base locale (Linux)
+DATABASE_URL=postgresql://user:password@172.17.0.1:5432/move4epilepsy
+
+# Base distante
+DATABASE_URL=postgresql://user:password@mon-serveur.com:5432/move4epilepsy
 ```
 
 ### 2.2 Lancer les containers
@@ -93,27 +107,6 @@ curl http://localhost:8000/
 - **ReDoc** : `http://localhost:8000/redoc`
 - **Health** : `http://localhost:8000/health`
 
-### PostgreSQL Database
-- **Host** : `localhost:5432`
-- **User** : `postgres`
-- **Password** : `postgres` (par défaut dans .env)
-- **Database** : `move4epilepsy`
-
-**Connexion depuis le terminal :**
-```bash
-psql -h localhost -U postgres -d move4epilepsy
-```
-
-### PgAdmin (optionnel)
-- **URL** : `http://localhost:5050`
-- **Email** : `admin@example.com`
-- **Password** : `admin`
-
-**Activer PgAdmin :**
-```bash
-docker-compose --profile dev up -d
-```
-
 ---
 
 ## 4. Commandes Utiles
@@ -127,31 +120,14 @@ docker-compose up -d
 # Arrêter les services
 docker-compose down
 
-# Arrêter et supprimer volumes (attention! perte de données)
-docker-compose down -v
-
 # Voir les logs
 docker-compose logs -f api
-docker-compose logs -f db
 
 # Rebuilder les images
 docker-compose build --no-cache
 
-# Redémarrer un service
+# Redémarrer le service
 docker-compose restart api
-```
-
-### Accès à la Base de Données
-
-```bash
-# Terminal PostgreSQL dans le container
-docker-compose exec db psql -U postgres -d move4epilepsy
-
-# Exemple: lister les tables
-\dt
-
-# Quitter psql
-\q
 ```
 
 ### Créer les Utilisateurs de Test
@@ -178,7 +154,7 @@ docker-compose exec api alembic revision --autogenerate -m "Description"
 ### Voir les Variables d'Environnement
 
 ```bash
-docker-compose exec api env | grep -i move
+docker-compose exec api env | grep -E "DATABASE_URL|SECRET_KEY|ENVIRONMENT"
 ```
 
 ---
@@ -240,7 +216,6 @@ LOG_LEVEL=WARNING
 ### Lancer en Production
 
 ```bash
-# Utiliser un fichier .env séparé
 docker-compose -f docker-compose.yml \
   --env-file .env.production \
   up -d
@@ -272,34 +247,7 @@ server {
 
 ---
 
-## 7. Gestion des Données
-
-### Backups PostgreSQL
-
-```bash
-# Backup complet
-docker-compose exec db pg_dump -U postgres move4epilepsy > backup.sql
-
-# Restauration
-docker-compose exec -T db psql -U postgres move4epilepsy < backup.sql
-```
-
-### Volumes
-
-```bash
-# Lister les volumes
-docker volume ls
-
-# Inspecter un volume
-docker volume inspect move4epilepsy-api_postgres_data
-
-# Supprimer les volumes (attention!)
-docker volume prune
-```
-
----
-
-## 8. Troubleshooting
+## 7. Troubleshooting
 
 ### L'API ne démarre pas
 
@@ -307,37 +255,27 @@ docker volume prune
 # 1. Vérifier les logs
 docker-compose logs api
 
-# 2. Reconstruire proprement
-docker-compose down -v
+# 2. Vérifier que DATABASE_URL est défini dans .env
+docker-compose exec api env | grep DATABASE_URL
+
+# 3. Reconstruire proprement
+docker-compose down
 docker-compose build --no-cache
 docker-compose up -d
-
-# 3. Vérifier les variables d'env
-docker-compose exec api env | grep SECRET_KEY
-```
-
-### "port 5432 already in use"
-
-```bash
-# Trouver le process utilisant le port
-lsof -i :5432
-
-# Tuer le process (macOS)
-kill -9 <PID>
-
-# Ou modifier le port dans docker-compose.yml
-# ports:
-#   - "5433:5432"
 ```
 
 ### "Connection refused: database"
 
 ```bash
-# Attendre que la DB soit prête
-docker-compose logs db
+# Sur Mac/Windows : utiliser host.docker.internal au lieu de localhost
+# DATABASE_URL=postgresql://user:pass@host.docker.internal:5432/move4epilepsy
 
-# DB health check
-docker-compose exec db pg_isready -U postgres
+# Sur Linux : utiliser l'IP de la gateway Docker (souvent 172.17.0.1)
+# DATABASE_URL=postgresql://user:pass@172.17.0.1:5432/move4epilepsy
+
+# Vérifier que PostgreSQL accepte les connexions distantes
+# Dans postgresql.conf : listen_addresses = '*'
+# Dans pg_hba.conf : ajouter une règle pour l'IP Docker
 ```
 
 ### Permissions Docker
@@ -352,14 +290,11 @@ newgrp docker
 
 ---
 
-## 9. Nettoyage & Housekeeping
+## 8. Nettoyage & Housekeeping
 
 ```bash
 # Supprimer les containers et images non utilisés
 docker system prune -a
-
-# Supprimer les volumes non utilisés
-docker volume prune
 
 # Voir l'usage disque
 docker system df
@@ -367,11 +302,10 @@ docker system df
 
 ---
 
-## 10. Ressources
+## 9. Ressources
 
 - [Docker Docs](https://docs.docker.com/)
 - [Docker Compose Docs](https://docs.docker.com/compose/)
-- [PostgreSQL Docker](https://hub.docker.com/_/postgres)
 - [FastAPI Deployment](https://fastapi.tiangolo.com/deployment/)
 
 ---
