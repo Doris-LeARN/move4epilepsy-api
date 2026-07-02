@@ -20,7 +20,7 @@ services:
       - ./app:/app/app
       - ./logs:/app/logs
     networks:
-      - move4epilepsy-net
+      - move4epilepsy-shared
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
@@ -30,9 +30,5 @@ services:
       start_period: 40s
 
 networks:
-  move4epilepsy-net:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 10.0.1.16/28
-          gateway: 10.0.1.17
+  move4epilepsy-shared:
+    external: true
