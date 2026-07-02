@@ -19,6 +19,8 @@ services:
     volumes:
       - ./app:/app/app
       - ./logs:/app/logs
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - move4epilepsy-shared
     restart: unless-stopped
