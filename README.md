@@ -2,7 +2,16 @@
 
 API FastAPI pour l'application Move4Epilepsy avec PostgreSQL.
 
-## 🚀 Installation Rapide (URGENCE)
+## Bases de données
+
+Le projet utilise deux bases PostgreSQL séparées :
+
+- **Principale** : `DATABASE_URL`, utilisée par l'API et le déploiement.
+- **Test** : `TEST_DATABASE_URL`, utilisée uniquement par pytest. Elle écoute par défaut sur le port `5433` et ne doit jamais être remplacée par l'URL principale.
+
+La base principale peut être PostgreSQL local, distant ou managé. Le fichier `docker-compose.yml` ne lance pas PostgreSQL : il lance l'API et se connecte à la valeur de `DATABASE_URL`.
+
+## Installation Rapide
 
 ### 1. Créer la base de données PostgreSQL
 
@@ -28,20 +37,50 @@ pip install -r requirements.txt
 
 ```bash
 cp .env.example .env
-# Éditer .env avec votre DATABASE_URL
+# Éditer .env avec votre SECRET_KEY et votre DATABASE_URL principale
 ```
 
 ### 4. Lancer l'API
 
 ```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8002
 ```
 
 L'API sera accessible sur :
 
-- **API** : http://localhost:8000
-- **Documentation Swagger** : http://localhost:8000/docs
-- **Documentation ReDoc** : http://localhost:8000/redoc
+- **API** : http://localhost:8002
+- **Documentation Swagger** : http://localhost:8002/docs
+- **Documentation ReDoc** : http://localhost:8002/redoc
+
+## Déploiement avec Docker
+
+1. Configurer `DATABASE_URL` vers la **base principale** et fournir une `SECRET_KEY` forte dans `.env`.
+2. Démarrer le service API, dont le nom est `api` :
+
+```bash
+docker compose up -d --build api
+docker compose logs -f api
+```
+
+Le conteneur API écoute sur le port `3003` de la machine et se connecte à la base indiquée par `DATABASE_URL`.
+
+## Base de test
+
+Démarrer uniquement la base de test :
+
+```bash
+docker compose -f docker-compose.test.yml up -d postgres-test
+TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5433/move4epilepsy_test \
+  .venv/bin/pytest
+```
+
+Arrêter la base de test :
+
+```bash
+docker compose -f docker-compose.test.yml down
+```
+
+Ne lancez jamais les tests avec `DATABASE_URL` ou `TEST_DATABASE_URL` pointant vers la base principale.
 
 ### 5. Créer les utilisateurs de test
 

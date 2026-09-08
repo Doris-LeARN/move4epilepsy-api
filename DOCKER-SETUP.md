@@ -31,7 +31,18 @@ sudo usermod -aG docker $USER
 
 ---
 
-## 2. Démarrage Rapide
+## 2. Deux bases PostgreSQL distinctes
+
+Le déploiement et les tests ne partagent pas la même base :
+
+| Usage | Variable | Port local par défaut | Configuration |
+|---|---|---:|---|
+| API / déploiement | `DATABASE_URL` | `5432` | `.env` |
+| Tests | `TEST_DATABASE_URL` | `5433` | `docker-compose.test.yml` |
+
+Le compose principal ne contient pas de service PostgreSQL. Il lance seulement le service `api`, qui se connecte à la base configurée par `DATABASE_URL`.
+
+## 3. Démarrage Rapide
 
 ### 2.1 Préparation
 
@@ -64,8 +75,8 @@ DATABASE_URL=postgresql://user:password@mon-serveur.com:5432/move4epilepsy
 ### 2.2 Lancer les containers
 
 ```bash
-# Construire les images & démarrer
-docker-compose up -d
+# Construire l'image & démarrer le service API
+docker compose up -d --build api
 
 # Vérifier l'état
 docker-compose ps
@@ -78,10 +89,10 @@ docker-compose logs -f api
 
 ```bash
 # Health check
-curl http://localhost:8000/health
+curl http://localhost:3003/health
 
 # Documentation Swagger
-open http://localhost:8000/docs
+open http://localhost:3003/docs
 
 # API root
 curl http://localhost:8000/
@@ -99,7 +110,18 @@ curl http://localhost:8000/
 
 ---
 
-## 3. Services Disponibles
+## 4. Base PostgreSQL de test
+
+```bash
+docker compose -f docker-compose.test.yml up -d postgres-test
+TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5433/move4epilepsy_test \
+  .venv/bin/pytest
+docker compose -f docker-compose.test.yml down
+```
+
+La base de test utilise un volume séparé et le port `5433`. Elle ne doit jamais être utilisée comme `DATABASE_URL` du déploiement.
+
+## 5. Services Disponibles
 
 ### API FastAPI
 - **Port** : `http://localhost:8000`

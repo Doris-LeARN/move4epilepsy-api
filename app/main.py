@@ -42,7 +42,6 @@ app = FastAPI(
 
 # Rate Limiter (centralisé dans app/core/rate_limiter.py)
 app.state.limiter = limiter
-limiter.init_app(app)
 
 @app.exception_handler(RateLimitExceeded)
 async def rate_limit_handler(request: Request, exc: RateLimitExceeded):

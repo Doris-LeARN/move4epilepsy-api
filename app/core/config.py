@@ -31,7 +31,7 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return [origin.strip() for origin in v.split(",") if origin.strip()]
         return v
-    
+
     # Sécurité - OBLIGATOIRE en production
     SECRET_KEY: str = Field(default="")
     ALGORITHM: str = "HS256"
@@ -64,11 +64,13 @@ class Settings(BaseSettings):
     @classmethod
     def database_url_must_be_set(cls, v: str) -> str:
         """DATABASE_URL doit être explicitement configuré via .env"""
-        if not v or v == "postgresql://postgres:postgres@localhost:5432/move4epilepsy":
+        if not v:
             raise ValueError(
                 "🔴 ERREUR CRITIQUE: DATABASE_URL must be explicitly set via environment variable (.env). "
                 "Never commit default credentials!"
             )
+        if os.getenv("ENVIRONMENT") == "test" and v.startswith("sqlite://"):
+            return v
         if not v.startswith(("postgresql://", "postgres://")):
             raise ValueError(
                 "🔴 ERREUR: DATABASE_URL must start with postgresql:// or postgres://"
@@ -85,7 +87,16 @@ class Settings(BaseSettings):
     LOG_DIR: str = "logs"
     
     # Sécurité supplémentaire
-    ALLOWED_HOSTS: List[str] = ["*"]
+    ALLOWED_HOSTS: Union[List[str], str] = ["*"]
+
+    @field_validator("ALLOWED_HOSTS", mode="before")
+    @classmethod
+    def parse_allowed_hosts(cls, v):
+        """Parse ALLOWED_HOSTS depuis une chaîne séparée par des virgules"""
+        if isinstance(v, str):
+            return [host.strip() for host in v.split(",") if host.strip()]
+        return v
+
     SECURE_COOKIES: bool = True
     ALLOW_CREDENTIALS: bool = True
     
@@ -103,6 +114,9 @@ class Settings(BaseSettings):
             
             if self.DEBUG:
                 raise ValueError("❌ DEBUG must be False in production")
+
+            if self.DATABASE_URL == "postgresql://postgres:postgres@localhost:5432/move4epilepsy":
+                raise ValueError("❌ DATABASE_URL must use production credentials")
             
             if not self.FORCE_HTTPS:
                 print("⚠️  WARNING: FORCE_HTTPS is disabled in production. Consider enabling it.")

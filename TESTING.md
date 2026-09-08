@@ -1,3 +1,18 @@
+## Base PostgreSQL de test
+
+Les tests utilisent une vraie base PostgreSQL dédiée afin de supporter les types
+`ARRAY`, `JSONB` et les contraintes SQL utilisées par l'API.
+
+```bash
+docker compose -f docker-compose.test.yml up -d
+source .venv/bin/activate
+TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5433/move4epilepsy_test \
+  pytest
+```
+
+Ne configurez jamais `TEST_DATABASE_URL` avec l'URL de développement ou de
+production. Les fixtures nettoient les tables de la base de test après chaque test.
+
 # 🧪 Tests Unitaires - Move4Epilepsy API
 
 Guide complet pour exécuter et écrire les tests.

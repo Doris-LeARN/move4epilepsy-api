@@ -3,29 +3,29 @@ Configuration pytest et fixtures globales
 """
 import pytest
 import os
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, Session
 from fastapi.testclient import TestClient
 
-# Importer après avoir configuré l'env
+# Les tests utilisent PostgreSQL, car certains modèles utilisent des types
+# spécifiques à PostgreSQL comme ARRAY et JSONB.
 os.environ["ENVIRONMENT"] = "test"
 os.environ["DEBUG"] = "True"
 os.environ["SECRET_KEY"] = "test-secret-key-min-32-characters-long"
-os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+os.environ["DATABASE_URL"] = os.getenv(
+    "TEST_DATABASE_URL",
+    "postgresql://postgres:postgres@localhost:5433/move4epilepsy_test",
+)
 
 from app.main import app
-from app.database.base import Base, get_db
+from app.database.base import Base, engine, get_db
 from app.models.user import User, UserProfile
 from app.core.security import get_password_hash
 
 
 @pytest.fixture(scope="session")
 def test_db():
-    """Crée une base de données test en mémoire"""
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False}
-    )
+    """Crée le schéma dans la base PostgreSQL de test dédiée."""
     Base.metadata.create_all(bind=engine)
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     
@@ -36,17 +36,19 @@ def test_db():
 
 @pytest.fixture(scope="function")
 def db_session(test_db):
-    """Crée une session DB pour chaque test"""
+    """Crée une session DB et nettoie toutes les tables après chaque test."""
     engine, SessionLocal = test_db
-    connection = engine.connect()
-    transaction = connection.begin()
-    session = SessionLocal(bind=connection)
+    session = SessionLocal()
     
     yield session
     
     session.close()
-    transaction.rollback()
-    connection.close()
+    with engine.begin() as connection:
+        table_names = [table.name for table in reversed(Base.metadata.sorted_tables)]
+        if table_names:
+            connection.execute(text(
+                f"TRUNCATE TABLE {', '.join(table_names)} RESTART IDENTITY CASCADE"
+            ))
 
 
 @pytest.fixture

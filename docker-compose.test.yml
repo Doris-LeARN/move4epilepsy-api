@@ -1,0 +1,20 @@
+services:
+  postgres-test:
+    image: postgres:16-alpine
+    container_name: ${TEST_DB_CONTAINER_NAME:-move4epilepsy-postgres-test}
+    environment:
+      POSTGRES_DB: ${TEST_DB_NAME:-move4epilepsy_test}
+      POSTGRES_USER: ${TEST_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${TEST_DB_PASSWORD:-postgres}
+    ports:
+      - "${TEST_DB_PORT:-5433}:5432"
+    volumes:
+      - move4epilepsy-postgres-test-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${TEST_DB_USER:-postgres} -d ${TEST_DB_NAME:-move4epilepsy_test}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  move4epilepsy-postgres-test-data:
