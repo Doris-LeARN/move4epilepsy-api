@@ -10,7 +10,7 @@ from app.models.chat import ChatChannel, ChatMessage, MessageReport
 from app.models.user import User, UserProfile
 from app.schemas.chat import (
     ChatChannelResponse, ChatChannelCreate,
-    ChatMessageResponse, ChatMessageCreate,
+    ChatMessageResponse, ChatMessageCreate, ChatMessageBase,
     MessageReportCreate, MessageReportResponse
 )
 from app.core.dependencies import get_current_user, get_current_user_optional, get_user_by_username
@@ -202,8 +202,57 @@ async def delete_message(
     
     message.is_deleted = True
     db.commit()
-    
+    # Broadcast la suppression aux abonnés du canal
+    try:
+        await chat_connection_manager.broadcast_json(
+            str(message.channel_id),
+            {"type": "delete_message", "payload": {"id": str(message.id)}},
+        )
+    except Exception:
+        pass
+
     return None
+
+
+@router.patch("/messages/{message_id}", response_model=ChatMessageResponse)
+async def update_message(
+    message_id: UUID,
+    message_data: ChatMessageBase,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Met à jour le contenu d'un message (utilisateur propriétaire ou admin)"""
+    message = db.query(ChatMessage).filter(ChatMessage.id == message_id).first()
+    if not message:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Message not found"
+        )
+
+    # Vérifier les permissions : propriétaire ou admin
+    user_role = current_user.profile.role if current_user.profile else None
+    if user_role not in ["admin"] and message.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only edit your own messages"
+        )
+
+    message.content = message_data.content.strip()
+    db.commit()
+    db.refresh(message)
+
+    response = _build_chat_message_response(db, message)
+
+    # Broadcast la mise à jour aux abonnés
+    try:
+        await chat_connection_manager.broadcast_json(
+            str(message.channel_id),
+            {"type": "update_message", "payload": response.model_dump(mode="json")},
+        )
+    except Exception:
+        pass
+
+    return response
 
 
 @router.post("/channels", response_model=ChatChannelResponse, status_code=status.HTTP_201_CREATED)

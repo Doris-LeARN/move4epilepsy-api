@@ -46,6 +46,7 @@ async def create_treatment(
             pass
 
     treatment = PatientTreatment(
+        user_id=current_user.id if current_user else None,
         name=treatment_data.name or "",
         age=treatment_data.age,
         sex=treatment_data.sex,
@@ -198,3 +199,33 @@ async def update_treatment(
     db.refresh(treatment)
     
     return treatment
+
+
+@router.delete("/treatments/{treatment_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_treatment(
+    treatment_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Supprime un traitement (l'utilisateur peut supprimer ses propres traitements)"""
+    treatment = db.query(PatientTreatment).filter(PatientTreatment.id == treatment_id).first()
+    
+    if not treatment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Treatment not found"
+        )
+    
+    # Vérifier que l'utilisateur est admin ou propriétaire du traitement
+    if current_user.profile is None or current_user.profile.role != "admin":
+        if treatment.user_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only delete your own treatments"
+            )
+    
+    db.delete(treatment)
+    db.commit()
+    
+    return None
+

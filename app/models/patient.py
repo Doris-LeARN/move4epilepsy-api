@@ -54,6 +54,7 @@ class PatientTreatment(Base):
     __tablename__ = "patient_treatments"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     # Champs de base (structure Supabase originale)
     name = Column(String, default="", nullable=True)  # Nom ou pseudonyme (anonymisé)
     age = Column(Integer, nullable=False)  # NOT NULL dans Supabase

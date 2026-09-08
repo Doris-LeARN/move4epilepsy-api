@@ -1,7 +1,7 @@
 """
 Modèles Opinion et Partenariats
 """
-from sqlalchemy import Column, String, Boolean, DateTime, Integer, Text, Numeric, ARRAY
+from sqlalchemy import Column, String, Boolean, DateTime, Integer, Text, Numeric, ARRAY, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 import uuid
@@ -13,6 +13,7 @@ class UserOpinion(Base):
     __tablename__ = "user_opinions"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     author = Column(String, default="", nullable=False)  # Valeur par défaut dans Supabase
     content = Column(Text, nullable=False)
     rating = Column(Integer, nullable=False)  # CHECK >= 1 AND <= 5

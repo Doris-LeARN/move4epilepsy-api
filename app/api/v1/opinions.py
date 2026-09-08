@@ -17,6 +17,8 @@ from app.schemas.opinion import (
     EpilepsyPerceptionResponse, EpilepsyPerceptionCreate
 )
 from app.core.permissions import require_admin
+from app.core.dependencies import get_current_user, get_current_user_optional
+from app.models.user import User
 
 router = APIRouter()
 
@@ -43,6 +45,7 @@ async def get_opinions(
 @router.post("/opinions", response_model=UserOpinionResponse, status_code=status.HTTP_201_CREATED)
 async def create_opinion(
     opinion_data: UserOpinionCreate,
+    current_user: Optional[User] = Depends(get_current_user_optional),
     db: Session = Depends(get_db)
 ):
     """Crée un avis (public, anonyme autorisé)"""
@@ -53,12 +56,35 @@ async def create_opinion(
             detail="Rating must be between 1 and 5"
         )
     
-    opinion = UserOpinion(**opinion_data.model_dump())
+    opinion = UserOpinion(
+        **opinion_data.model_dump(),
+        user_id=current_user.id if current_user else None,
+    )
     db.add(opinion)
     db.commit()
     db.refresh(opinion)
     
     return opinion
+
+
+@router.delete("/opinions/{opinion_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_opinion(
+    opinion_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Supprime un avis appartenant à l'utilisateur connecté ou à un administrateur."""
+    opinion = db.query(UserOpinion).filter(UserOpinion.id == opinion_id).first()
+    if not opinion:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Opinion not found")
+
+    is_admin = current_user.profile is not None and current_user.profile.role == "admin"
+    if not is_admin and opinion.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only delete your own opinions")
+
+    db.delete(opinion)
+    db.commit()
+    return None
 
 
 # ========== PARTENARIATS ==========
