@@ -48,6 +48,7 @@ class PharmacyStock(Base):
     medication_id = Column(UUID(as_uuid=True), ForeignKey("medications.id", ondelete="CASCADE"), nullable=False, index=True)
     quantity = Column(Integer, default=0, nullable=False)
     is_rupture = Column(Boolean, default=False, nullable=False)
+    availability_version = Column(Integer, default=0, server_default="0", nullable=False)
     last_update = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     declared_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

@@ -1,13 +1,70 @@
 """Tests pour les endpoints patients et traitements"""
-import pytest
 from fastapi import status
-from datetime import datetime
+from uuid import uuid4
+
+from app.core.config import settings
+
+
+def _create_treatment(client, treatment_data, monkeypatch, email=None, verification_token=None):
+    email = email or f"{uuid4().hex}@example.com"
+    sent_codes = []
+    monkeypatch.setattr(
+        "app.api.v1.patients.send_patient_verification_code",
+        lambda sent_email, code, purpose: sent_codes.append((sent_email, code, purpose)),
+    )
+
+    if verification_token is None:
+        request_response = client.post(
+            "/api/v1/patients/treatments/email-verification/request",
+            json={"email": email, "purpose": "registration"},
+        )
+        assert request_response.status_code == status.HTTP_202_ACCEPTED
+        assert request_response.json() == {
+            "message": (
+                "Si l'adresse est valide et la demande autorisée, "
+                "un code de vérification sera envoyé."
+            )
+        }
+
+        verification_response = client.post(
+            "/api/v1/patients/treatments/email-verification/confirm",
+            json={
+                "email": email,
+                "purpose": "registration",
+                "code": sent_codes[-1][1],
+            },
+        )
+        assert verification_response.status_code == status.HTTP_200_OK
+        verification_token = verification_response.json()["verification_token"]
+
+    consent_response = client.post(
+        "/api/v1/patients/treatments/consent",
+        json={
+            "email": email,
+            "email_verification_token": verification_token,
+            "consent_analysis": True,
+            "consent_alerts": True,
+            "consent_text_version": settings.PATIENT_CONSENT_TEXT_VERSION,
+        },
+    )
+    assert consent_response.status_code == status.HTTP_201_CREATED
+
+    final_response = client.post(
+        "/api/v1/patients/treatments",
+        json={
+            **treatment_data,
+            "email": email,
+            "email_verification_token": verification_token,
+            "consent_draft_token": consent_response.json()["consent_draft_token"],
+        },
+    )
+    return final_response
 
 
 class TestPatientTreatmentCreate:
     """Tests pour POST /patients/treatments"""
     
-    def test_create_treatment_anonymous(self, client):
+    def test_create_treatment_anonymous(self, client, monkeypatch):
         """Test création traitement anonyme (sans JWT)"""
         treatment_data = {
             "name": "John",
@@ -20,16 +77,14 @@ class TestPatientTreatmentCreate:
             "access_ease": "difficile",
             "effectiveness": 8,
         }
-        response = client.post(
-            "/api/v1/patients/treatments",
-            json=treatment_data
-        )
+        response = _create_treatment(client, treatment_data, monkeypatch)
         assert response.status_code == status.HTTP_201_CREATED
         data = response.json()
         assert data["medication_name"] == "Valproate"
         assert data["age"] == 35
+        assert data["name"] == ""
     
-    def test_create_treatment_with_duration(self, client):
+    def test_create_treatment_with_duration(self, client, monkeypatch):
         """Test création traitement avec durée"""
         treatment_data = {
             "age": 42,
@@ -42,10 +97,7 @@ class TestPatientTreatmentCreate:
             "access_ease": "facile",
             "effectiveness": 9,
         }
-        response = client.post(
-            "/api/v1/patients/treatments",
-            json=treatment_data
-        )
+        response = _create_treatment(client, treatment_data, monkeypatch)
         assert response.status_code == status.HTTP_201_CREATED
         data = response.json()
         assert data["treatment_duration"] == 12
@@ -64,7 +116,7 @@ class TestPatientTreatmentCreate:
         }
         response = client.post(
             "/api/v1/patients/treatments",
-            json=treatment_data
+            json=treatment_data,
         )
         # Pydantic validation error
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
@@ -83,11 +135,11 @@ class TestPatientTreatmentCreate:
         }
         response = client.post(
             "/api/v1/patients/treatments",
-            json=treatment_data
+            json=treatment_data,
         )
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
     
-    def test_create_treatment_with_optional_fields(self, client):
+    def test_create_treatment_with_optional_fields(self, client, monkeypatch):
         """Test création traitement avec champs optionnels"""
         treatment_data = {
             "age": 50,
@@ -103,10 +155,7 @@ class TestPatientTreatmentCreate:
             "additional_comments": "Bon résultat général",
             "wants_alert": True,
         }
-        response = client.post(
-            "/api/v1/patients/treatments",
-            json=treatment_data
-        )
+        response = _create_treatment(client, treatment_data, monkeypatch)
         assert response.status_code == status.HTTP_201_CREATED
         data = response.json()
         assert data["side_effects"] == "Somnolence légère"
@@ -116,13 +165,16 @@ class TestPatientTreatmentCreate:
 class TestPatientTreatmentList:
     """Tests pour GET /patients/treatments"""
     
-    def test_list_treatments_empty(self, client):
+    def test_list_treatments_empty(self, client, admin_auth_headers):
         """Test lister traitements quand aucun"""
-        response = client.get("/api/v1/patients/treatments")
+        response = client.get(
+            "/api/v1/patients/treatments",
+            headers=admin_auth_headers,
+        )
         assert response.status_code == status.HTTP_200_OK
         assert response.json() == []
     
-    def test_list_treatments_with_data(self, client):
+    def test_list_treatments_with_data(self, client, monkeypatch, admin_auth_headers):
         """Test lister traitements avec données"""
         # Créer un traitement
         treatment_data = {
@@ -135,54 +187,62 @@ class TestPatientTreatmentList:
             "access_ease": "facile",
             "effectiveness": 8,
         }
-        client.post("/api/v1/patients/treatments", json=treatment_data)
+        created = _create_treatment(client, treatment_data, monkeypatch)
+        assert created.status_code == status.HTTP_201_CREATED
         
         # Lister
-        response = client.get("/api/v1/patients/treatments")
+        response = client.get(
+            "/api/v1/patients/treatments",
+            headers=admin_auth_headers,
+        )
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert len(data) > 0
         assert data[0]["medication_name"] == "Levetiracetam"
     
-    def test_list_treatments_with_filters(self, client):
-        """Test lister avec filtres (location, medication)"""
+    def test_list_treatments_without_personal_data_filters(self, client, monkeypatch, admin_auth_headers):
+        """Admin listing does not filter declarations by city or medication."""
         # Créer traitements
-        client.post("/api/v1/patients/treatments", json={
+        first = _create_treatment(client, {
             "age": 30, "sex": "homme", "location": "Dakar",
             "medication_name": "Valproate", "dosage": "500mg",
             "frequency": "2x/jour", "access_ease": "difficile", "effectiveness": 8,
-        })
-        client.post("/api/v1/patients/treatments", json={
+        }, monkeypatch)
+        second = _create_treatment(client, {
             "age": 25, "sex": "femme", "location": "Lagos",
             "medication_name": "Lamotrigine", "dosage": "200mg",
             "frequency": "1x/jour", "access_ease": "facile", "effectiveness": 9,
-        })
-        
-        # Filtrer par location
-        response = client.get("/api/v1/patients/treatments?location=Dakar")
+        }, monkeypatch)
+        assert first.status_code == status.HTTP_201_CREATED
+        assert second.status_code == status.HTTP_201_CREATED
+
+        response = client.get(
+            "/api/v1/patients/treatments",
+            headers=admin_auth_headers,
+        )
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        assert all(t["location"] == "Dakar" for t in data)
+        assert {t["medication_name"] for t in data} == {"Valproate", "Lamotrigine"}
 
 
 class TestPatientTreatmentStats:
     """Tests pour GET /patients/treatments/stats"""
     
-    def test_get_stats_empty(self, client, auth_headers):
+    def test_get_stats_empty(self, client, admin_auth_headers):
         """Test stats quand aucun traitement"""
         response = client.get(
             "/api/v1/patients/treatments/stats",
-            headers=auth_headers
+            headers=admin_auth_headers
         )
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["total_treatments"] == 0
     
-    def test_get_stats_with_data(self, client, auth_headers):
+    def test_get_stats_with_data(self, client, monkeypatch, admin_auth_headers):
         """Test stats avec données"""
         # Créer traitements
         for i in range(3):
-            client.post("/api/v1/patients/treatments", json={
+            response = _create_treatment(client, {
                 "age": 30 + i,
                 "sex": "homme",
                 "location": "Dakar",
@@ -191,11 +251,12 @@ class TestPatientTreatmentStats:
                 "frequency": "2x/jour",
                 "access_ease": "difficile",
                 "effectiveness": 7 + i,  # 7, 8, 9
-            })
-        
+            }, monkeypatch)
+            assert response.status_code == status.HTTP_201_CREATED
+
         response = client.get(
             "/api/v1/patients/treatments/stats",
-            headers=auth_headers
+            headers=admin_auth_headers
         )
         assert response.status_code == status.HTTP_200_OK
         data = response.json()

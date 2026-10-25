@@ -1,8 +1,8 @@
 """
 Modèles Patient
 """
-from sqlalchemy import Column, String, Boolean, DateTime, Integer, ForeignKey, Text, Numeric
-from sqlalchemy.dialects.postgresql import UUID, INET, JSONB
+from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Integer, Text, UniqueConstraint
+from sqlalchemy.dialects.postgresql import UUID, INET
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import uuid
@@ -80,6 +80,14 @@ class PatientTreatment(Base):
     waiting_time = Column(String, nullable=True)
     stockout_frequency = Column(String, nullable=True)
     wants_alert = Column(Boolean, default=False, nullable=True)
+    contact_email = Column(String, nullable=True, index=True)
+    email_verified = Column(Boolean, default=False, nullable=False)
+    email_verified_at = Column(DateTime(timezone=True), nullable=True)
+    consent_analysis = Column(Boolean, nullable=True)
+    consent_alerts = Column(Boolean, nullable=True)
+    consent_text_version = Column(String, nullable=True)
+    consented_at = Column(DateTime(timezone=True), nullable=True)
+    consent_confirmed_at = Column(DateTime(timezone=True), nullable=True)
     morning_pills = Column(String, nullable=True)
     noon_pills = Column(String, nullable=True)
     evening_pills = Column(String, nullable=True)
@@ -94,3 +102,88 @@ class PatientTreatment(Base):
     restock_delay_precise = Column(String, nullable=True)  # Délai précis si fourni (ex: "2-3 jours")
     action_when_delay_unknown = Column(String, nullable=True)  # Action si délai imprécis/inconnu
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class PatientEmailChallenge(Base):
+    """Short-lived, one-time email verification codes."""
+    __tablename__ = "patient_email_challenges"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    email_hash = Column(String, nullable=False, index=True)
+    purpose = Column(String, nullable=False, index=True)
+    code_digest = Column(String, nullable=False)
+    attempts = Column(Integer, default=0, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    consumed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class PatientEmailGrant(Base):
+    """Short-lived authorization to create consented treatments."""
+    __tablename__ = "patient_email_grants"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    email_hash = Column(String, nullable=False, index=True)
+    token_digest = Column(String, unique=True, nullable=False, index=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class PatientManagementSession(Base):
+    """Temporary session restricted to treatments belonging to one email."""
+    __tablename__ = "patient_management_sessions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    email = Column(String, nullable=False, index=True)
+    token_digest = Column(String, unique=True, nullable=False, index=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class PatientConsentDraft(Base):
+    """Short-lived record of checkbox consent pending final confirmation."""
+    __tablename__ = "patient_consent_drafts"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    email_hash = Column(String, nullable=False, index=True)
+    token_digest = Column(String, unique=True, nullable=False, index=True)
+    consent_analysis = Column(Boolean, nullable=False)
+    consent_alerts = Column(Boolean, nullable=False)
+    consent_text_version = Column(String, nullable=False)
+    consented_at = Column(DateTime(timezone=True), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    consumed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class PatientAvailabilityNotification(Base):
+    """Outbox entry for one treatment and one stock-restoration event."""
+    __tablename__ = "patient_availability_notifications"
+    __table_args__ = (
+        UniqueConstraint(
+            "treatment_id",
+            "stock_id",
+            "availability_version",
+            name="uq_patient_availability_notification_event",
+        ),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    treatment_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("patient_treatments.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    stock_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("pharmacy_stocks.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    availability_version = Column(Integer, nullable=False)
+    status = Column(String, default="pending", nullable=False, index=True)
+    attempts = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    sent_at = Column(DateTime(timezone=True), nullable=True)

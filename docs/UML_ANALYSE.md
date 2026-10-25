@@ -24,7 +24,7 @@ Dernière mise à jour : Février 2025.
 | **StockoutAlert** | `stockout_alerts` | id, medication_name, patient_location, status, … | (entité seule) |
 | **SubscriptionPlan** | `subscription_plans` | id, name, country, monthly_price, annual_price, currency, features, max_stock_entries, is_active | *→PharmacySubscription |
 | **CountryPricing** | `country_pricing` | id, country, currency, base_monthly_price, … | (entité seule) |
-| **PharmacySubscription** | `pharmacy_subscriptions` | id, pharmacy_id (FK), plan_id (FK), status, start_date, end_date, auto_renew | *→1 Pharmacy, *→1 SubscriptionPlan, *→* SubscriptionPayment |
+| **PharmacySubscription** | `pharmacy_subscriptions` | id, pharmacy_id (FK), plan_id (FK), status, start_date, end_date, auto_renew, billing_country, billing_period, amount, currency | *→1 Pharmacy, *→1 SubscriptionPlan, *→* SubscriptionPayment |
 | **SubscriptionPayment** | `subscription_payments` | id, subscription_id (FK), pharmacy_id (FK), amount, currency, payment_method, status, paid_at | *→1 PharmacySubscription |
 | **ChatChannel** | `chat_channels` | id, name, description, type, is_active | *→ChatMessage |
 | **ChatMessage** | `chat_messages` | id, channel_id (FK), user_id (FK), content, is_deleted, is_reported | *→1 ChatChannel, *→1 User |
@@ -97,6 +97,8 @@ Dernière mise à jour : Février 2025.
 | **Abonnements** | | |
 | Authentifié | Consulter plans, s’abonner, paiements | GET /subscriptions/plans, GET /subscriptions/plans/{id}, GET /subscriptions/my-subscription, POST /subscriptions/subscribe, POST /subscriptions/payments, PUT /subscriptions/payments/{id}/complete |
 | Admin / rôle autorisé | Créer plan | POST /subscriptions/plans |
+
+Pour le checkout, le frontend filtre les offres avec `GET /subscriptions/plans?country=<pays>`, puis envoie `plan_id`, `billing_country` confirmé, `billing_period` (`monthly` ou `annual`) et `auto_renew` à `POST /subscriptions/subscribe`. La réponse contient le pays, la périodicité, le montant et la devise figés pour cette commande; son statut initial est `pending_payment`. À `POST /subscriptions/payments`, l’API recalcule le montant à partir de ce snapshot et ne fait qu’accepter une valeur fournie par le client si elle correspond. L’abonnement n’est activé qu’après confirmation administrative du paiement.
 | **Opinions / Partenariats / Signalements / Perceptions** | | |
 | Tous / Authentifié | CRUD avis, candidatures partenariat, signalements médicament, questionnaires perception | GET/POST /opinions, GET/POST/PUT /partnerships, GET/POST/PUT /medicine-reports, GET/POST /epilepsy-perceptions |
 | **Admin** | | |

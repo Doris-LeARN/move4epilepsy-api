@@ -4,6 +4,8 @@
 **Statut** : ✅ IMPLÉMENTÉ  
 **Principle** : "Seul l'administrateur général lit les traitements"
 
+> **Mise a jour du parcours patient** : ce document decrit le modele d'anonymat historique. Les nouvelles declarations requierent maintenant une adresse e-mail verifiee et une preuve de consentement ; les routes de gestion self-service sont decrites dans [`docs/CONSENTEMENT_PATIENT.md`](../docs/CONSENTEMENT_PATIENT.md). Elles restent sans compte utilisateur et sans nom obligatoire.
+
 ---
 
 ## 📋 Résumé Exécutif

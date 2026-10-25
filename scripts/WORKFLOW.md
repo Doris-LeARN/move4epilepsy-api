@@ -57,6 +57,8 @@ Un seul fichier pour tous les usages. Prérequis : `cd move4epilepsy-api` puis `
 | Script | Rôle |
 |--------|------|
 | `migrate_from_supabase.py` | Migration complète Supabase → PostgreSQL |
+| `migrate_subscription_checkout_fields.py` | Ajouter le pays, la périodicité et le snapshot de prix aux souscriptions |
+| `migrate_patient_consent_workflow.py` | Ajouter les champs de consentement et les tables OTP/session des déclarations patient |
 | `verify_and_fix_schema.py` | Aligner les tables PostgreSQL sur les modèles (colonnes, types, NULL) + diagnostic `patient_treatments` |
 | `migrate_force_utf8.py` | Correction UTF-8 (uniquement si besoin après migration) |
 | `init_data.py` | Insérer les médicaments de base dans `medications` |
@@ -66,6 +68,12 @@ Un seul fichier pour tous les usages. Prérequis : `cd move4epilepsy-api` puis `
 ## Vérifications rapides (optionnel)
 
 ```bash
+# Colonnes de souscription nécessaires au checkout
+python scripts/migrate_subscription_checkout_fields.py
+
+# Consentement et gestion vérifiée des déclarations patient
+python scripts/migrate_patient_consent_workflow.py
+
 # Connexion PostgreSQL
 psql -U postgres -d move4epilepsy -c "SELECT COUNT(*) FROM users; SELECT COUNT(*) FROM patient_treatments;"
 ```

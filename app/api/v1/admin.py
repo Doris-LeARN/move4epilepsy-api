@@ -44,7 +44,9 @@ async def get_dashboard_stats(
     total_users = db.query(func.count(User.id)).scalar() or 0
     total_pharmacies = db.query(func.count(Pharmacy.id)).scalar() or 0
     total_medications = db.query(func.count(Medication.id)).scalar() or 0
-    total_treatments = db.query(func.count(PatientTreatment.id)).scalar() or 0
+    total_treatments = db.query(func.count(PatientTreatment.id)).filter(
+        PatientTreatment.consent_analysis.is_(True),
+    ).scalar() or 0
     
     active_subscriptions = db.query(func.count(PharmacySubscription.id)).filter(
         PharmacySubscription.status.in_(["active", "trial"])

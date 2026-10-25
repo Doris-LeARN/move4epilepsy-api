@@ -79,12 +79,21 @@ class Settings(BaseSettings):
     
     # Environnement
     ENVIRONMENT: str = "development"
-    DEBUG: bool = False
+    DEBUG: bool = True
     FORCE_HTTPS: bool = False
     
     # Logging
     LOG_LEVEL: str = "INFO"
     LOG_DIR: str = "logs"
+
+    # Email delivery and patient privacy workflow
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = ""
+    SMTP_USE_STARTTLS: bool = True
+    PATIENT_CONSENT_TEXT_VERSION: str = "v2"
     
     # Sécurité supplémentaire
     ALLOWED_HOSTS: Union[List[str], str] = ["*"]

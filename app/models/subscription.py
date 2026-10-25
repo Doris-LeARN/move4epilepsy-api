@@ -53,6 +53,10 @@ class PharmacySubscription(Base):
     start_date = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     end_date = Column(DateTime(timezone=True), nullable=False)
     auto_renew = Column(Boolean, default=True, nullable=False)
+    billing_country = Column(String, nullable=True)
+    billing_period = Column(String, default="monthly", nullable=False)
+    amount = Column(Numeric(10, 2), nullable=True)
+    currency = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 

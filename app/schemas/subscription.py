@@ -1,8 +1,8 @@
 """
 Schémas Pydantic pour les abonnements
 """
-from pydantic import BaseModel
-from typing import Optional, List, Any
+from pydantic import BaseModel, Field
+from typing import Optional, List, Any, Literal
 from datetime import datetime
 from uuid import UUID
 from decimal import Decimal
@@ -12,10 +12,10 @@ class SubscriptionPlanBase(BaseModel):
     """Schéma de base pour un plan"""
     name: str
     country: str
-    monthly_price: Decimal
-    annual_price: Decimal
+    monthly_price: Decimal = Field(gt=0)
+    annual_price: Decimal = Field(gt=0)
     currency: str
-    features: List[Any] = []
+    features: List[Any] = Field(default_factory=list)
     max_stock_entries: int = 100
     is_active: bool = True
 
@@ -38,15 +38,21 @@ class PharmacySubscriptionBase(BaseModel):
     """Schéma de base pour un abonnement"""
     pharmacy_id: UUID
     plan_id: UUID
-    status: str = "trial"  # 'trial', 'active', 'expired', 'cancelled'
+    status: str
     start_date: datetime
     end_date: datetime
     auto_renew: bool = True
+    billing_country: Optional[str] = None
+    billing_period: Literal["monthly", "annual"] = "monthly"
+    amount: Optional[Decimal] = None
+    currency: Optional[str] = None
 
 
 class PharmacySubscriptionCreate(BaseModel):
     """Schéma pour la création d'un abonnement"""
     plan_id: UUID
+    billing_country: str = Field(min_length=2, max_length=100)
+    billing_period: Literal["monthly", "annual"] = "monthly"
     auto_renew: bool = True
 
 
@@ -55,6 +61,7 @@ class PharmacySubscriptionResponse(PharmacySubscriptionBase):
     id: UUID
     created_at: datetime
     updated_at: datetime
+    plan: Optional[SubscriptionPlanResponse] = None
 
     class Config:
         from_attributes = True
@@ -63,11 +70,11 @@ class PharmacySubscriptionResponse(PharmacySubscriptionBase):
 class SubscriptionPaymentCreate(BaseModel):
     """Schéma pour la création d'un paiement"""
     subscription_id: UUID
-    amount: Decimal
-    currency: str
     payment_method: str
     payment_provider: Optional[str] = None
     transaction_id: Optional[str] = None
+    amount: Optional[Decimal] = None
+    currency: Optional[str] = None
 
 
 class SubscriptionPaymentResponse(BaseModel):

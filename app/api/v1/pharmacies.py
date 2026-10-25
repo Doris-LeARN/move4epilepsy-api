@@ -1,13 +1,16 @@
 """
 Endpoints pour les pharmacies
 """
+from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Depends, Query, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 from uuid import UUID
 from app.database.base import get_db
 from app.models.pharmacy import Pharmacy, PharmacyStock
 from app.models.medication import Medication
+from app.models.patient import PatientAvailabilityNotification, PatientTreatment
 from app.schemas.pharmacy import (
     PharmacyResponse, PharmacyCreate, PharmacyUpdate,
     StockResponse, StockCreate, PharmacyWithStocks
@@ -15,9 +18,103 @@ from app.schemas.pharmacy import (
 from app.core.dependencies import get_current_user
 from app.models.user import User
 from app.core.permissions import require_pharmacien, require_admin
+from app.core.email import EmailDeliveryError, send_patient_availability_alert
 
 router = APIRouter()
 
+
+def _availability_restored(
+    previous_quantity: int,
+    previous_is_rupture: bool,
+    quantity: int,
+    is_rupture: bool,
+) -> bool:
+    was_available = previous_quantity > 0 and not previous_is_rupture
+    is_available = quantity > 0 and not is_rupture
+    return not was_available and is_available
+
+
+def _deliver_pending_patient_alerts(db: Session, stock: PharmacyStock) -> None:
+    delivery_failed = False
+    while True:
+        notification = db.query(PatientAvailabilityNotification).filter(
+            PatientAvailabilityNotification.stock_id == stock.id,
+            PatientAvailabilityNotification.status == "pending",
+        ).with_for_update(skip_locked=True).first()
+        if not notification:
+            break
+
+        treatment = db.query(PatientTreatment).filter(
+            PatientTreatment.id == notification.treatment_id,
+        ).first()
+        if (
+            not treatment
+            or not treatment.email_verified
+            or not treatment.consent_alerts
+            or not treatment.wants_alert
+            or not treatment.contact_email
+        ):
+            notification.status = "cancelled"
+            db.commit()
+            continue
+
+        try:
+            send_patient_availability_alert(treatment.contact_email)
+        except EmailDeliveryError:
+            notification.attempts += 1
+            delivery_failed = True
+            db.commit()
+            break
+        else:
+            notification.status = "sent"
+            notification.sent_at = datetime.now(timezone.utc)
+        db.commit()
+
+    if delivery_failed:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Stock was updated but one or more availability alerts could not be delivered",
+        )
+
+
+def _queue_patient_availability_alerts(
+    db: Session,
+    stock: PharmacyStock,
+    pharmacy: Pharmacy,
+    medication: Medication,
+) -> None:
+    locations = {
+        value.strip().lower()
+        for value in (pharmacy.city, pharmacy.commune, pharmacy.department)
+        if value and value.strip()
+    }
+    if locations:
+        treatments = db.query(PatientTreatment).filter(
+            PatientTreatment.wants_alert.is_(True),
+            PatientTreatment.email_verified.is_(True),
+            PatientTreatment.consent_alerts.is_(True),
+            PatientTreatment.contact_email.is_not(None),
+            func.lower(func.trim(PatientTreatment.medication_name))
+            == medication.name.strip().lower(),
+            func.lower(func.trim(PatientTreatment.location)).in_(locations),
+        ).all()
+        existing_treatment_ids = {
+            treatment_id
+            for (treatment_id,) in db.query(
+                PatientAvailabilityNotification.treatment_id,
+            ).filter(
+                PatientAvailabilityNotification.stock_id == stock.id,
+                PatientAvailabilityNotification.availability_version
+                == stock.availability_version,
+            ).all()
+        }
+        for treatment in treatments:
+            if treatment.id not in existing_treatment_ids:
+                db.add(PatientAvailabilityNotification(
+                    treatment_id=treatment.id,
+                    stock_id=stock.id,
+                    availability_version=stock.availability_version,
+                ))
 
 @router.get("", response_model=List[PharmacyResponse])
 async def get_pharmacies(
@@ -177,26 +274,39 @@ async def create_or_update_stock(
     existing_stock = db.query(PharmacyStock).filter(
         PharmacyStock.pharmacy_id == pharmacy_id,
         PharmacyStock.medication_id == stock_data.medication_id
-    ).first()
-    
+    ).with_for_update().first()
+
     if existing_stock:
-        # Mettre à jour
+        availability_restored = _availability_restored(
+            existing_stock.quantity,
+            existing_stock.is_rupture,
+            stock_data.quantity,
+            stock_data.is_rupture,
+        )
         existing_stock.quantity = stock_data.quantity
         existing_stock.is_rupture = stock_data.is_rupture
         existing_stock.declared_by = current_user.id
-        db.commit()
-        db.refresh(existing_stock)
-        return existing_stock
+        if availability_restored:
+            existing_stock.availability_version += 1
+        stock = existing_stock
     else:
-        # Créer
         new_stock = PharmacyStock(
             pharmacy_id=pharmacy_id,
             medication_id=stock_data.medication_id,
             quantity=stock_data.quantity,
             is_rupture=stock_data.is_rupture,
+            availability_version=0,
             declared_by=current_user.id,
         )
         db.add(new_stock)
-        db.commit()
-        db.refresh(new_stock)
-        return new_stock
+        stock = new_stock
+        availability_restored = False
+
+    if availability_restored:
+        db.flush()
+        _queue_patient_availability_alerts(db, stock, pharmacy, medication)
+    db.commit()
+    db.refresh(stock)
+    _deliver_pending_patient_alerts(db, stock)
+
+    return stock
