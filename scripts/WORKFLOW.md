@@ -19,6 +19,8 @@ Un seul fichier pour tous les usages. Prérequis : `cd move4epilepsy-api` puis `
    `python scripts/migrate_from_supabase.py`
 7. Si la table `medications` est vide :
    `python scripts/init_data.py`
+8. Si des accents du catalogue sont corrompus :
+   `python -m scripts.migrate_medication_accents`
 
 ---
 
@@ -64,6 +66,7 @@ Un seul fichier pour tous les usages. Prérequis : `cd move4epilepsy-api` puis `
 | `migrate_subscription_checkout_fields.py` | Ajouter le pays, la périodicité et le snapshot de prix aux souscriptions |
 | `migrate_patient_consent_workflow.py` | Ajouter les champs de consentement et les tables OTP/session des déclarations patient |
 | `migrate_medication_categories.py` | Ajouter les domaines et catégories thérapeutiques au référentiel médicaments |
+| `migrate_medication_accents.py` | Réparer les accents connus dans le catalogue médicaments |
 | `verify_and_fix_schema.py` | Aligner les tables PostgreSQL sur les modèles (colonnes, types, NULL) + diagnostic `patient_treatments` |
 | `migrate_force_utf8.py` | Correction UTF-8 (uniquement si besoin après migration) |
 | `init_data.py` | Insérer les médicaments de base dans `medications` |
