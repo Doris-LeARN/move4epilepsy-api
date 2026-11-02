@@ -17,7 +17,7 @@ from app.schemas.pharmacy import (
 )
 from app.core.dependencies import get_current_user
 from app.models.user import User
-from app.core.permissions import require_pharmacien, require_admin
+from app.core.permissions import require_pharmacien, require_admin, require_role
 from app.core.email import EmailDeliveryError, send_patient_availability_alert
 
 router = APIRouter()
@@ -195,6 +195,68 @@ async def get_public_pharmacies_with_stocks(
         result.append(PharmacyWithStocks(**pharmacy_data.model_dump(), stocks=stocks_data))
 
     return result
+
+
+@router.get("/analytics/mine")
+def get_my_pharmacy_analytics(
+    current_user: User = Depends(require_role(["pharmacien"])),
+    db: Session = Depends(get_db),
+):
+    """Return operational stock aggregates for the authenticated pharmacist's own pharmacy."""
+    pharmacy = db.query(Pharmacy).filter(
+        Pharmacy.user_id == current_user.id,
+    ).first()
+    if not pharmacy:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No pharmacy is linked to this account",
+        )
+
+    stock_rows = db.query(PharmacyStock, Medication.name).join(
+        Medication,
+        PharmacyStock.medication_id == Medication.id,
+    ).filter(
+        PharmacyStock.pharmacy_id == pharmacy.id,
+    ).all()
+
+    categorized_stocks = []
+    for stock, medication_name in stock_rows:
+        quantity = max(0, stock.quantity or 0)
+        if stock.is_rupture or quantity == 0:
+            category = "out_of_stock"
+        elif quantity <= (stock.min_order_quantity or 1):
+            category = "low_stock"
+        else:
+            category = "available"
+        categorized_stocks.append({
+            "medication": medication_name,
+            "quantity": quantity,
+            "category": category,
+        })
+
+    category_counts = {
+        category: sum(
+            1 for stock in categorized_stocks if stock["category"] == category
+        )
+        for category in ("available", "low_stock", "out_of_stock")
+    }
+    update_dates = [
+        stock.updated_at or stock.last_update
+        for stock, _ in stock_rows
+        if stock.updated_at or stock.last_update
+    ]
+
+    return {
+        "pharmacy_name": pharmacy.name,
+        "stock_lines": len(categorized_stocks),
+        "total_units": sum(stock["quantity"] for stock in categorized_stocks),
+        "status_counts": category_counts,
+        "last_stock_update": max(update_dates).isoformat() if update_dates else None,
+        "stock_by_medication": sorted(
+            categorized_stocks,
+            key=lambda stock: (stock["quantity"], stock["medication"].casefold()),
+        ),
+    }
 
 
 @router.get("/{pharmacy_id}", response_model=PharmacyResponse)

@@ -12,7 +12,26 @@ class MedicationBase(BaseModel):
     name: str
     dosage: str
     form: str = "Comprimé"
+    category_id: Optional[str] = None
     active: bool = True
+
+
+class MedicationDomainResponse(BaseModel):
+    id: str
+    label: str
+
+    class Config:
+        from_attributes = True
+
+
+class MedicationCategoryResponse(BaseModel):
+    id: str
+    domain_id: str
+    label: str
+    domain: MedicationDomainResponse
+
+    class Config:
+        from_attributes = True
 
 
 class MedicationCreate(MedicationBase):
@@ -25,12 +44,14 @@ class MedicationUpdate(BaseModel):
     name: Optional[str] = None
     dosage: Optional[str] = None
     form: Optional[str] = None
+    category_id: Optional[str] = None
     active: Optional[bool] = None
 
 
 class MedicationResponse(MedicationBase):
     """Schéma de réponse pour un médicament"""
     id: UUID
+    category: Optional[MedicationCategoryResponse] = None
     created_at: datetime
     updated_at: datetime
 

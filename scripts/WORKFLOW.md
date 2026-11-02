@@ -8,12 +8,16 @@ Un seul fichier pour tous les usages. Prérequis : `cd move4epilepsy-api` puis `
 ## 1. Première mise en place (base vide)
 
 1. Créer la base PostgreSQL `move4epilepsy`.
-2. Démarrer l’API une fois : les tables sont créées au démarrage.
-3. Vérifier/corriger le schéma :  
+2. Créer les tables et appliquer les colonnes du workflow patient :
+   `python -m scripts.migrate_patient_consent_workflow`
+3. Créer le référentiel de domaines et catégories médicaments :
+   `python -m scripts.migrate_medication_categories`
+4. Démarrer l’API.
+5. Vérifier/corriger le schéma :
    `python scripts/verify_and_fix_schema.py`
-4. Migrer les données depuis Supabase :  
+6. Migrer les données depuis Supabase :
    `python scripts/migrate_from_supabase.py`
-5. Si la table `medications` est vide :  
+7. Si la table `medications` est vide :
    `python scripts/init_data.py`
 
 ---
@@ -59,6 +63,7 @@ Un seul fichier pour tous les usages. Prérequis : `cd move4epilepsy-api` puis `
 | `migrate_from_supabase.py` | Migration complète Supabase → PostgreSQL |
 | `migrate_subscription_checkout_fields.py` | Ajouter le pays, la périodicité et le snapshot de prix aux souscriptions |
 | `migrate_patient_consent_workflow.py` | Ajouter les champs de consentement et les tables OTP/session des déclarations patient |
+| `migrate_medication_categories.py` | Ajouter les domaines et catégories thérapeutiques au référentiel médicaments |
 | `verify_and_fix_schema.py` | Aligner les tables PostgreSQL sur les modèles (colonnes, types, NULL) + diagnostic `patient_treatments` |
 | `migrate_force_utf8.py` | Correction UTF-8 (uniquement si besoin après migration) |
 | `init_data.py` | Insérer les médicaments de base dans `medications` |
@@ -72,7 +77,10 @@ Un seul fichier pour tous les usages. Prérequis : `cd move4epilepsy-api` puis `
 python scripts/migrate_subscription_checkout_fields.py
 
 # Consentement et gestion vérifiée des déclarations patient
-python scripts/migrate_patient_consent_workflow.py
+python -m scripts.migrate_patient_consent_workflow
+
+# Domaines et catégories du référentiel médicaments
+python -m scripts.migrate_medication_categories
 
 # Connexion PostgreSQL
 psql -U postgres -d move4epilepsy -c "SELECT COUNT(*) FROM users; SELECT COUNT(*) FROM patient_treatments;"

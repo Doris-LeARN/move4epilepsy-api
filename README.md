@@ -40,11 +40,29 @@ cp .env.example .env
 # Éditer .env avec votre SECRET_KEY et votre DATABASE_URL principale
 ```
 
+Pour obtenir les itinéraires routiers détaillés, créez un compte OpenRouteService,
+générez une clé API depuis le tableau de bord, puis renseignez `OPENROUTESERVICE_API_KEY`
+dans `.env`. Cette clé est facultative : sans elle, le calcul approximatif reste actif.
+Après modification de `.env`, redémarrez l'API (et recréez le conteneur Docker si vous
+l'utilisez). Ne partagez pas la clé et ne la commitez pas.
+
 ### 4. Lancer l'API
 
 ```bash
+python -m scripts.migrate_patient_consent_workflow
+python -m scripts.migrate_medication_categories
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8002
 ```
+
+Les migrations sont idempotentes. La première crée les tables manquantes à partir des
+modèles et ajoute les colonnes du workflow de consentement ; la seconde ajoute les
+domaines et catégories du référentiel. PostgreSQL doit être démarré et accessible avant
+de les exécuter. Le script `run.sh` peut aussi lancer l'API avec `.venv` ou `venv`.
+
+Le référentiel des catégories est disponible sur `GET /api/v1/medications/categories`.
+Les médicaments du catalogue peuvent être filtrés par `domain` ou `category_id`, et
+les déclarations de traitement peuvent transmettre un `medication_category_id`.
+Les catégories sont facultatives pour préserver la compatibilité des déclarations existantes.
 
 L'API sera accessible sur :
 
@@ -86,7 +104,7 @@ Ne lancez jamais les tests avec `DATABASE_URL` ou `TEST_DATABASE_URL` pointant v
 
 ```bash
 # Option 1 : Via l'API (nécessite d'être admin)
-curl -X POST "http://localhost:8000/api/v1/auth/create-test-users" \
+curl -X POST "http://localhost:8002/api/v1/auth/create-test-users" \
   -H "Authorization: Bearer <votre_token_admin>" \
   -H "Content-Type: application/json"
 
@@ -112,7 +130,7 @@ python scripts/create_test_users.py
 
 ## 🗄️ Structure de la Base de Données
 
-Les tables sont créées automatiquement au démarrage. Modèles inclus :
+Les tables et colonnes sont préparées par la migration indiquée à l'étape 4. Modèles inclus :
 
 - `users` - Utilisateurs
 - `user_profiles` - Profils avec rôles
@@ -139,8 +157,8 @@ DATABASE_URL=postgresql://username:password@localhost:5432/move4epilepsy
 
 ## 📝 Notes
 
-- Les tables sont créées automatiquement au démarrage en développement
-- Pour la production, utiliser Alembic pour les migrations
+- Exécuter la migration avant le premier démarrage et après les changements de schéma
+- Le dépôt utilise des scripts de migration explicites ; aucun historique Alembic n'est configuré
 - Les mots de passe sont hashés avec bcrypt
 - Les tokens JWT expirent après 30 minutes par défaut
 

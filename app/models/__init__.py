@@ -1,10 +1,11 @@
 from app.models.user import User, UserProfile
-from app.models.medication import Medication
+from app.models.medication import Medication, MedicationCategory, MedicationDomain
 from app.models.pharmacy import Pharmacy, PharmacyStock
 from app.models.patient import (
     PatientSearch,
     SearchAlert,
     PatientTreatment,
+    UnlistedMedicationSubmission,
     PatientEmailChallenge,
     PatientEmailGrant,
     PatientManagementSession,
@@ -22,11 +23,14 @@ __all__ = [
     "User",
     "UserProfile",
     "Medication",
+    "MedicationDomain",
+    "MedicationCategory",
     "Pharmacy",
     "PharmacyStock",
     "PatientSearch",
     "SearchAlert",
     "PatientTreatment",
+    "UnlistedMedicationSubmission",
     "PatientEmailChallenge",
     "PatientEmailGrant",
     "PatientManagementSession",

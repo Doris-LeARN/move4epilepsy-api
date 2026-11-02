@@ -2,18 +2,14 @@
 
 from sqlalchemy import text
 
+import app.models
 from app.database.base import Base, engine
-from app.models.patient import (
-    PatientConsentDraft,
-    PatientEmailChallenge,
-    PatientEmailGrant,
-    PatientManagementSession,
-    PatientAvailabilityNotification,
-)
 
 
 def migrate_patient_consent_workflow() -> None:
     with engine.begin() as connection:
+        Base.metadata.create_all(bind=connection)
+
         for statement in (
             "ALTER TABLE patient_treatments ADD COLUMN IF NOT EXISTS contact_email VARCHAR",
             "ALTER TABLE patient_treatments ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT FALSE",
@@ -27,17 +23,6 @@ def migrate_patient_consent_workflow() -> None:
             "CREATE INDEX IF NOT EXISTS ix_patient_treatments_contact_email ON patient_treatments (contact_email)",
         ):
             connection.execute(text(statement))
-
-        Base.metadata.create_all(
-            bind=connection,
-            tables=[
-                PatientEmailChallenge.__table__,
-                PatientEmailGrant.__table__,
-                PatientManagementSession.__table__,
-                PatientConsentDraft.__table__,
-                PatientAvailabilityNotification.__table__,
-            ],
-        )
 
     print("Patient consent workflow schema is ready.")
 

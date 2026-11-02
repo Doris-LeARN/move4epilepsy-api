@@ -4,7 +4,6 @@ Avec fallback sur calcul Haversine si l'API échoue
 """
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
-import os
 import traceback
 from app.core.config import settings
 from app.core.geoutils import haversine_distance, estimate_driving_time
@@ -20,7 +19,7 @@ router = APIRouter()
 
 # Clé API OpenRouteService depuis les variables d'environnement
 # ⚠️ CRITIQUE: Ne JAMAIS utiliser de valeur par défaut exposée
-OPENROUTESERVICE_API_KEY = os.getenv("OPENROUTESERVICE_API_KEY")
+OPENROUTESERVICE_API_KEY = settings.OPENROUTESERVICE_API_KEY
 
 if not OPENROUTESERVICE_API_KEY:
     import logging

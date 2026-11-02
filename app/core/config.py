@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_REQUESTS: int = 100
     RATE_LIMIT_PERIOD: int = 60  # secondes
+
+    # Routing
+    OPENROUTESERVICE_API_KEY: str = ""
     
     # Base de données PostgreSQL
     DATABASE_URL: str = Field(default="")
@@ -93,7 +96,7 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     SMTP_FROM_EMAIL: str = ""
     SMTP_USE_STARTTLS: bool = True
-    PATIENT_CONSENT_TEXT_VERSION: str = "v2"
+    PATIENT_CONSENT_TEXT_VERSION: str = "v3"
     
     # Sécurité supplémentaire
     ALLOWED_HOSTS: Union[List[str], str] = ["*"]

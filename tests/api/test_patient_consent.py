@@ -132,7 +132,7 @@ def test_verified_email_can_manage_only_its_treatments_atomically(
     assert client.get("/api/v1/patients/treatments/mine", headers=headers).json() == []
 
 
-def test_consent_requires_current_version_and_alert_consent(client, monkeypatch):
+def test_consent_requires_current_version_and_keeps_alerts_optional(client, monkeypatch):
     email = f"{uuid4().hex}@example.com"
     sent_codes = []
     monkeypatch.setattr(
@@ -153,7 +153,33 @@ def test_consent_requires_current_version_and_alert_consent(client, monkeypatch)
 
     data["consent_text_version"] = settings.PATIENT_CONSENT_TEXT_VERSION
     data["consent_alerts"] = False
-    assert client.post("/api/v1/patients/treatments/consent", json=data).status_code == 422
+    consent_response = client.post("/api/v1/patients/treatments/consent", json=data)
+    assert consent_response.status_code == 201
+
+    treatment = {
+        "age": 34,
+        "sex": "non-specifie",
+        "location": "Dakar",
+        "medication_name": "Valproate",
+        "dosage": "500 mg",
+        "frequency": "1x/jour",
+        "access_ease": "difficult",
+        "effectiveness": 7,
+        "wants_alert": True,
+        "email": email,
+        "email_verification_token": verification["verification_token"],
+        "consent_draft_token": consent_response.json()["consent_draft_token"],
+    }
+    rejected_alert = client.post("/api/v1/patients/treatments", json=treatment)
+    assert rejected_alert.status_code == 400
+
+    treatment["wants_alert"] = False
+    next_consent = client.post("/api/v1/patients/treatments/consent", json=data)
+    treatment["consent_draft_token"] = next_consent.json()["consent_draft_token"]
+    created = client.post("/api/v1/patients/treatments", json=treatment)
+    assert created.status_code == 201
+    assert created.json()["consent_alerts"] is False
+    assert created.json()["wants_alert"] is False
 
 
 def test_management_code_is_generic_for_unknown_email(client, monkeypatch):

@@ -10,39 +10,75 @@ from uuid import UUID
 class PatientTreatmentCreate(BaseModel):
     """Schéma pour la création d'un traitement patient - Correspond à Supabase"""
     name: Optional[str] = ""  # Nom ou pseudonyme (anonymisé)
-    age: int = Field(ge=0, le=150)  # NOT NULL dans Supabase
-    sex: str  # NOT NULL, CHECK IN ('homme', 'femme', 'autre', 'non-specifie')
+    age: int = Field(ge=1, le=120)
+    sex: Literal["homme", "femme", "autre", "non-specifie"]
     location: str  # NOT NULL
-    medication_name: str  # Text, pas UUID FK
-    dosage: str
-    frequency: str
-    treatment_duration: Optional[int] = None  # Durée en mois (calculée)
-    treatment_start_date: Optional[datetime] = None  # Début du traitement
+    medication_name: str = Field(min_length=1, max_length=255)  # Text, pas UUID FK
+    dosage: str = Field(min_length=1)
+    frequency: str = Field(min_length=1)
+    treatment_duration: int = Field(ge=1)
+    treatment_start_date: datetime
     treatment_end_date: Optional[datetime] = None  # Fin du traitement
-    treatment_is_ongoing: Optional[bool] = False  # Traitement en cours
-    monthly_cost: Optional[str] = None
-    unit_price: Optional[str] = None
-    access_ease: str  # NOT NULL
+    treatment_is_ongoing: bool
+    medication_category_id: Optional[str] = None
+    medication_is_unlisted: bool = False
+    medication_country: Optional[str] = Field(default=None, max_length=100)
+    monthly_cost: str = Field(pattern=r"^(?:\d+(?:\.\d{1,2})?|prefer-not-to-say)$")
+    unit_price: str = Field(pattern=r"^(?:\d+(?:\.\d{1,2})?|prefer-not-to-say)$")
+    access_ease: str = Field(min_length=1)
     effectiveness: int = Field(ge=1, le=10)
     side_effects: Optional[str] = ""
     difficulties: Optional[str] = ""
     additional_comments: Optional[str] = ""
-    found_medication: Optional[str] = None
-    pharmacies_visited: Optional[str] = None
-    waiting_time: Optional[str] = None
-    stockout_frequency: Optional[str] = None
-    wants_alert: Optional[bool] = False
-    morning_pills: Optional[str] = None
-    noon_pills: Optional[str] = None
-    evening_pills: Optional[str] = None
-    education_level: Optional[str] = None
-    minimum_salary: Optional[str] = None
-    employment_status: Optional[str] = None
-    has_financial_resources: Optional[str] = None
-    has_alternative_medication: Optional[bool] = None
+    found_medication: Literal["yes", "no", "partially", "unknown"]
+    pharmacies_visited: str = Field(pattern=r"^\d+$")
+    waiting_time: Literal["same-day", "1-3-days", "4-7-days", "more-than-7-days", "unknown"]
+    stockout_frequency: Literal["never", "monthly", "weekly", "often", "unknown"]
+    wants_alert: bool
+    morning_pills: str = Field(pattern=r"^\d+$")
+    noon_pills: str = Field(pattern=r"^\d+$")
+    evening_pills: str = Field(pattern=r"^\d+$")
+    education_level: Literal[
+        "no-formal-education", "primary", "secondary", "higher", "prefer-not-to-say",
+    ]
+    minimum_salary: str = Field(pattern=r"^(?:\d+(?:\.\d{1,2})?|prefer-not-to-say)$")
+    employment_status: Literal[
+        "employed", "self-employed", "unemployed", "student", "retired", "other-response",
+        "prefer-not-to-say",
+    ]
+    has_financial_resources: Literal["yes", "no", "partially", "prefer-not-to-say"]
+    emotional_impact: Literal[
+        "none", "mild", "moderate", "high", "prefer-not-to-say",
+    ]
+    social_stigma: Literal[
+        "never", "sometimes", "often", "always", "prefer-not-to-say",
+    ]
+    professional_impact: Literal[
+        "none", "mild", "moderate", "major", "not-applicable", "prefer-not-to-say",
+    ]
+    social_support: Literal[
+        "strong", "partial", "limited", "none", "prefer-not-to-say",
+    ]
+    access_barrier: Literal[
+        "none", "cost", "distance", "transport", "stockout", "information", "multiple",
+        "other-response", "prefer-not-to-say",
+    ]
+    cost_related_treatment_change: Literal[
+        "none", "delayed_purchase", "missed_or_reduced_doses", "stopped_treatment",
+        "prefer-not-to-say",
+    ]
+    discrimination_context: Literal[
+        "none", "healthcare", "work", "education", "family_community", "public_services",
+        "multiple_contexts", "prefer-not-to-say",
+    ]
+    rights_support_need: Literal[
+        "none", "rights_information", "report_discrimination", "legal_support",
+        "psychological_support", "peer_support", "other-response", "prefer-not-to-say",
+    ]
+    has_alternative_medication: bool
     alternative_medication_name: Optional[str] = None
-    knows_restock_delay: Optional[bool] = None  # La pharmacie a-t-elle informé du délai ?
-    is_restock_delay_precise: Optional[bool] = None  # Le délai est-il précis ?
+    knows_restock_delay: bool
+    is_restock_delay_precise: Optional[bool] = None  # Not applicable when no delay was communicated
     restock_delay_precise: Optional[str] = None  # Délai précis si fourni
     action_when_delay_unknown: Optional[str] = None  # Action si délai imprécis/inconnu
     email: EmailStr
@@ -53,26 +89,50 @@ class PatientTreatmentCreate(BaseModel):
     @classmethod
     def normalize_email(cls, value: EmailStr) -> str:
         return str(value).strip().lower()
+
+    @field_validator("medication_name")
+    @classmethod
+    def normalize_medication_name(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("medication_country")
+    @classmethod
+    def normalize_medication_country(cls, value: Optional[str]) -> Optional[str]:
+        return value.strip() if value is not None else None
     
     @model_validator(mode='after')
     def validate_restock_delay_logic(self):
-        """
-        Valide la logique des délais de réapprovisionnement :
-        - Si knows_restock_delay est True ET is_restock_delay_precise est True → restock_delay_precise doit être rempli
-        - Si knows_restock_delay est True ET is_restock_delay_precise est False → action_when_delay_unknown doit être rempli
-        - Si knows_restock_delay est False → action_when_delay_unknown peut être rempli
-        """
-        if self.knows_restock_delay is True:
-            if self.is_restock_delay_precise is True:
-                # Si délai précis, action_when_delay_unknown n'est pas nécessaire
-                if not self.restock_delay_precise:
-                    # Optionnel : on peut laisser vide, mais c'est mieux si rempli
-                    pass
-            elif self.is_restock_delay_precise is False:
-                # Si délai imprécis, action_when_delay_unknown doit être rempli
-                if not self.action_when_delay_unknown:
-                    # Optionnel : on peut laisser vide
-                    pass
+        if self.knows_restock_delay and self.is_restock_delay_precise is None:
+            raise ValueError("A precision response is required when a restock delay is known")
+        if not self.knows_restock_delay and self.is_restock_delay_precise is not None:
+            raise ValueError("Restock delay precision is not applicable when no delay is known")
+        if self.is_restock_delay_precise and not (self.restock_delay_precise or "").strip():
+            raise ValueError("A precise restock delay must be provided")
+        if (not self.knows_restock_delay or self.is_restock_delay_precise is False) and not (
+            self.action_when_delay_unknown or ""
+        ).strip():
+            raise ValueError("An action is required when the restock delay is unknown or unclear")
+        if self.is_restock_delay_precise and self.action_when_delay_unknown:
+            raise ValueError("Unknown-delay action is not applicable for a precise delay")
+        if self.treatment_is_ongoing and self.treatment_end_date is not None:
+            raise ValueError("An ongoing treatment cannot have an end date")
+        if not self.treatment_is_ongoing and self.treatment_end_date is None:
+            raise ValueError("An end date is required for a completed treatment")
+        if self.has_alternative_medication and not (self.alternative_medication_name or "").strip():
+            raise ValueError("An alternative medication name is required when one is reported")
+        if not self.has_alternative_medication and self.alternative_medication_name:
+            raise ValueError("An alternative medication name requires an alternative to be reported")
+        return self
+
+    @model_validator(mode="after")
+    def validate_unlisted_medication_details(self):
+        if not self.medication_name:
+            raise ValueError("Medication name cannot be blank")
+        if self.medication_is_unlisted:
+            if not self.medication_country:
+                raise ValueError("A country is required for an unlisted medication")
+        elif self.medication_country:
+            raise ValueError("A country can only be provided for an unlisted medication")
         return self
 
 
@@ -88,6 +148,7 @@ class PatientTreatmentUpdate(BaseModel):
     treatment_start_date: Optional[datetime] = None
     treatment_end_date: Optional[datetime] = None
     treatment_is_ongoing: Optional[bool] = None
+    medication_category_id: Optional[str] = None
     monthly_cost: Optional[str] = None
     unit_price: Optional[str] = None
     access_ease: Optional[str] = None
@@ -106,6 +167,34 @@ class PatientTreatmentUpdate(BaseModel):
     minimum_salary: Optional[str] = None
     employment_status: Optional[str] = None
     has_financial_resources: Optional[str] = None
+    emotional_impact: Optional[Literal[
+        "none", "mild", "moderate", "high", "prefer-not-to-say",
+    ]] = None
+    social_stigma: Optional[Literal[
+        "never", "sometimes", "often", "always", "prefer-not-to-say",
+    ]] = None
+    professional_impact: Optional[Literal[
+        "none", "mild", "moderate", "major", "not-applicable", "prefer-not-to-say",
+    ]] = None
+    social_support: Optional[Literal[
+        "strong", "partial", "limited", "none", "prefer-not-to-say",
+    ]] = None
+    access_barrier: Optional[Literal[
+        "none", "cost", "distance", "transport", "stockout", "information", "multiple",
+        "other-response", "prefer-not-to-say",
+    ]] = None
+    cost_related_treatment_change: Optional[Literal[
+        "none", "delayed_purchase", "missed_or_reduced_doses", "stopped_treatment",
+        "prefer-not-to-say",
+    ]] = None
+    discrimination_context: Optional[Literal[
+        "none", "healthcare", "work", "education", "family_community", "public_services",
+        "multiple_contexts", "prefer-not-to-say",
+    ]] = None
+    rights_support_need: Optional[Literal[
+        "none", "rights_information", "report_discrimination", "legal_support",
+        "psychological_support", "peer_support", "other-response", "prefer-not-to-say",
+    ]] = None
     has_alternative_medication: Optional[bool] = None
     alternative_medication_name: Optional[str] = None
     knows_restock_delay: Optional[bool] = None
@@ -150,7 +239,7 @@ class PatientConsentDraftCreate(BaseModel):
     email: EmailStr
     email_verification_token: str = Field(min_length=32, max_length=128)
     consent_analysis: bool
-    consent_alerts: Literal[True]
+    consent_alerts: bool
     consent_text_version: str = Field(min_length=1, max_length=50)
 
     @field_validator("email")
@@ -180,6 +269,21 @@ class PatientConsentWithdrawal(PatientDeleteTreatments):
     confirm_withdrawal: Literal[True]
 
 
+class UnlistedMedicationSubmissionResponse(BaseModel):
+    status: Literal[
+        "pending_validation",
+        "needs_clarification",
+        "approved",
+        "rejected",
+    ]
+    country: str
+    location: str
+    submitted_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 class PatientTreatmentResponse(BaseModel):
     """Schéma de réponse pour un traitement patient - Correspond à Supabase"""
     id: UUID
@@ -194,6 +298,8 @@ class PatientTreatmentResponse(BaseModel):
     treatment_start_date: Optional[datetime] = None  # Début du traitement
     treatment_end_date: Optional[datetime] = None  # Fin du traitement
     treatment_is_ongoing: Optional[bool] = None  # Traitement en cours
+    medication_category_id: Optional[str] = None
+    unlisted_medication_submission: Optional["UnlistedMedicationSubmissionResponse"] = None
     monthly_cost: Optional[str] = None
     unit_price: Optional[str] = None
     access_ease: str
@@ -220,6 +326,14 @@ class PatientTreatmentResponse(BaseModel):
     minimum_salary: Optional[str] = None
     employment_status: Optional[str] = None
     has_financial_resources: Optional[str] = None
+    emotional_impact: Optional[str] = None
+    social_stigma: Optional[str] = None
+    professional_impact: Optional[str] = None
+    social_support: Optional[str] = None
+    access_barrier: Optional[str] = None
+    cost_related_treatment_change: Optional[str] = None
+    discrimination_context: Optional[str] = None
+    rights_support_need: Optional[str] = None
     has_alternative_medication: Optional[bool] = None
     alternative_medication_name: Optional[str] = None
     knows_restock_delay: Optional[bool] = None

@@ -10,7 +10,6 @@ from app.core.rate_limiter import limiter
 import logging
 from app.core.config import settings
 from app.api.v1.router import api_router
-from app.database.base import engine, Base
 import os
 
 # Configuration logging
@@ -22,10 +21,6 @@ logger = logging.getLogger(__name__)
 
 # Créer le répertoire logs s'il n'existe pas
 os.makedirs(settings.LOG_DIR, exist_ok=True)
-
-# Créer les tables au démarrage (pour le développement)
-# En production, utiliser Alembic pour les migrations
-Base.metadata.create_all(bind=engine)
 
 # Configuration docs selon l'environnement
 docs_url = f"{settings.API_V1_STR}/openapi.json" if settings.DEBUG else None

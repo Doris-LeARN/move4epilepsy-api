@@ -20,7 +20,7 @@ Guide complet pour lancer l'API avec Docker et Docker Compose.
 
 # Vérifier installation
 docker --version
-docker-compose --version
+docker compose version
 ```
 
 **Linux (via apt/yum) :**
@@ -78,11 +78,15 @@ DATABASE_URL=postgresql://user:password@mon-serveur.com:5432/move4epilepsy
 # Construire l'image & démarrer le service API
 docker compose up -d --build api
 
+# Appliquer le schéma (avant le premier démarrage et après une mise à jour)
+docker compose run --rm --build api python -m scripts.migrate_patient_consent_workflow
+docker compose run --rm api python -m scripts.migrate_medication_categories
+
 # Vérifier l'état
-docker-compose ps
+docker compose ps
 
 # Voir les logs
-docker-compose logs -f api
+docker compose logs -f api
 ```
 
 ### 2.3 Vérifier que ça marche
@@ -95,7 +99,7 @@ curl http://localhost:3003/health
 open http://localhost:3003/docs
 
 # API root
-curl http://localhost:8000/
+curl http://localhost:3003/
 ```
 
 **Résultat attendu** :
@@ -124,10 +128,10 @@ La base de test utilise un volume séparé et le port `5433`. Elle ne doit jamai
 ## 5. Services Disponibles
 
 ### API FastAPI
-- **Port** : `http://localhost:8000`
-- **Docs** : `http://localhost:8000/docs` (Swagger)
-- **ReDoc** : `http://localhost:8000/redoc`
-- **Health** : `http://localhost:8000/health`
+- **Port** : `http://localhost:3003`
+- **Docs** : `http://localhost:3003/docs` (Swagger)
+- **ReDoc** : `http://localhost:3003/redoc`
+- **Health** : `http://localhost:3003/health`
 
 ---
 
@@ -137,46 +141,44 @@ La base de test utilise un volume séparé et le port `5433`. Elle ne doit jamai
 
 ```bash
 # Démarrer les services
-docker-compose up -d
+docker compose up -d
 
 # Arrêter les services
-docker-compose down
+docker compose down
 
 # Voir les logs
-docker-compose logs -f api
+docker compose logs -f api
 
 # Rebuilder les images
-docker-compose build --no-cache
+docker compose build --no-cache
 
 # Redémarrer le service
-docker-compose restart api
+docker compose restart api
 ```
 
 ### Créer les Utilisateurs de Test
 
 ```bash
 # Via l'API (endpoints protégés)
-curl -X POST http://localhost:8000/api/v1/auth/create-test-users \
+curl -X POST http://localhost:3003/api/v1/auth/create-test-users \
   -H "Authorization: Bearer <admin_token>"
 
 # Via le script (dans le container)
-docker-compose exec api python scripts/create_test_users.py
+docker compose exec api python scripts/create_test_users.py
 ```
 
-### Exécuter des Migrations
+### Appliquer les changements de schéma
 
 ```bash
-# Alembic migrations
-docker-compose exec api alembic upgrade head
-
-# Créer une nouvelle migration
-docker-compose exec api alembic revision --autogenerate -m "Description"
+# Le dépôt utilise des scripts de migration explicites, pas Alembic.
+docker compose run --rm api python -m scripts.migrate_patient_consent_workflow
+docker compose run --rm api python -m scripts.migrate_medication_categories
 ```
 
 ### Voir les Variables d'Environnement
 
 ```bash
-docker-compose exec api env | grep -E "DATABASE_URL|SECRET_KEY|ENVIRONMENT"
+docker compose exec api env | grep -E "DATABASE_URL|SECRET_KEY|ENVIRONMENT"
 ```
 
 ---
@@ -199,23 +201,23 @@ Les volumes sont configurés pour recharger automatiquement les changements :
 echo "new-package==1.0.0" >> requirements.txt
 
 # 2. Rebuilder l'image
-docker-compose build api
+docker compose build api
 
 # 3. Redémarrer le service
-docker-compose restart api
+docker compose restart api
 ```
 
 ### Déboguer
 
 ```bash
 # Logs détaillés
-docker-compose logs -f --tail=100 api
+docker compose logs -f --tail=100 api
 
 # Entrer dans le container
-docker-compose exec api /bin/bash
+docker compose exec api /bin/bash
 
 # Exécuter une commande Python
-docker-compose exec api python -c "print('Hello')"
+docker compose exec api python -c "print('Hello')"
 ```
 
 ---

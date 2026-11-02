@@ -6,8 +6,13 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from uuid import UUID
 from app.database.base import get_db
-from app.models.medication import Medication
-from app.schemas.medication import MedicationResponse, MedicationCreate, MedicationUpdate
+from app.models.medication import Medication, MedicationCategory
+from app.schemas.medication import (
+    MedicationCategoryResponse,
+    MedicationResponse,
+    MedicationCreate,
+    MedicationUpdate,
+)
 from app.schemas.search import SearchParams, SearchResult
 from app.core.permissions import require_admin
 from app.models.pharmacy import Pharmacy, PharmacyStock
@@ -17,9 +22,22 @@ from datetime import datetime
 router = APIRouter()
 
 
+@router.get("/categories", response_model=List[MedicationCategoryResponse])
+async def get_medication_categories(db: Session = Depends(get_db)):
+    """Return active medication categories grouped by their medical domain."""
+    return db.query(MedicationCategory).filter(
+        MedicationCategory.active.is_(True),
+    ).order_by(
+        MedicationCategory.domain_id,
+        MedicationCategory.label,
+    ).all()
+
+
 @router.get("", response_model=List[MedicationResponse])
 async def get_medications(
     active_only: bool = Query(True, description="Retourner uniquement les médicaments actifs"),
+    domain: Optional[str] = Query(None, description="Filtrer par domaine médical"),
+    category_id: Optional[str] = Query(None, description="Filtrer par catégorie"),
     db: Session = Depends(get_db)
 ):
     """Récupère tous les médicaments (actifs par défaut)"""
@@ -27,6 +45,12 @@ async def get_medications(
     
     if active_only:
         query = query.filter(Medication.active == True)
+    if domain:
+        query = query.join(MedicationCategory).filter(
+            MedicationCategory.domain_id == domain,
+        )
+    if category_id:
+        query = query.filter(Medication.category_id == category_id)
     
     medications = query.order_by(Medication.name, Medication.dosage).all()
     return medications
@@ -56,6 +80,15 @@ async def create_medication(
     _: None = Depends(require_admin)
 ):
     """Crée un nouveau médicament (admin uniquement)"""
+    if medication_data.category_id is not None and not db.query(MedicationCategory.id).filter(
+        MedicationCategory.id == medication_data.category_id,
+        MedicationCategory.active.is_(True),
+    ).first():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Medication category not found or inactive",
+        )
+
     # Vérifier si le médicament existe déjà
     existing = db.query(Medication).filter(
         Medication.name == medication_data.name,
@@ -91,9 +124,18 @@ async def update_medication(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Medication not found"
         )
-    
+
     # Mettre à jour les champs fournis
     update_data = medication_data.model_dump(exclude_unset=True)
+    category_id = update_data.get("category_id")
+    if category_id is not None and not db.query(MedicationCategory.id).filter(
+        MedicationCategory.id == category_id,
+        MedicationCategory.active.is_(True),
+    ).first():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Medication category not found or inactive",
+        )
     for field, value in update_data.items():
         setattr(medication, field, value)
     

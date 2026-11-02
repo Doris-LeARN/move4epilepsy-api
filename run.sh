@@ -1,18 +1,18 @@
 #!/bin/bash
-# Script pour lancer l'API avec le bon environnement
+set -e
 
-# Aller dans le dossier de l'API
 cd "$(dirname "$0")"
 
-# Activer l'environnement virtuel
-source venv/bin/activate
+VENV_DIR="${VENV_DIR:-.venv}"
+if [ ! -x "$VENV_DIR/bin/uvicorn" ]; then
+    VENV_DIR="venv"
+fi
 
-# Vérifier que SQLAlchemy est installé
-python3 -c "import sqlalchemy" 2>/dev/null || {
-    echo "❌ SQLAlchemy n'est pas installé. Installation..."
-    pip install -r requirements.txt
-}
+if [ ! -x "$VENV_DIR/bin/uvicorn" ]; then
+    echo "❌ Environnement Python introuvable. Créez-le puis installez les dépendances :"
+    echo "   python -m venv .venv && .venv/bin/pip install -r requirements.txt"
+    exit 1
+fi
 
-# Lancer l'API
 echo "🚀 Lancement de l'API..."
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+exec "$VENV_DIR/bin/uvicorn" app.main:app --reload --host 0.0.0.0 --port "${PORT:-8002}"

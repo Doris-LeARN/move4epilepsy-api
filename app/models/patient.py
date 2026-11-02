@@ -67,6 +67,12 @@ class PatientTreatment(Base):
     treatment_start_date = Column(DateTime(timezone=True), nullable=True)  # Début du traitement
     treatment_end_date = Column(DateTime(timezone=True), nullable=True)  # Fin du traitement
     treatment_is_ongoing = Column(Boolean, default=False, nullable=True)  # Traitement en cours
+    medication_category_id = Column(
+        String,
+        ForeignKey("medication_categories.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     monthly_cost = Column(String, nullable=True)  # Nullable après migration
     unit_price = Column(String, nullable=True)
     access_ease = Column(String, nullable=False)  # NOT NULL dans Supabase originale
@@ -95,6 +101,14 @@ class PatientTreatment(Base):
     minimum_salary = Column(String, nullable=True)
     employment_status = Column(String, nullable=True)
     has_financial_resources = Column(String, nullable=True)
+    emotional_impact = Column(String, nullable=True)
+    social_stigma = Column(String, nullable=True)
+    professional_impact = Column(String, nullable=True)
+    social_support = Column(String, nullable=True)
+    access_barrier = Column(String, nullable=True)
+    cost_related_treatment_change = Column(String, nullable=True)
+    discrimination_context = Column(String, nullable=True)
+    rights_support_need = Column(String, nullable=True)
     has_alternative_medication = Column(Boolean, nullable=True)
     alternative_medication_name = Column(String, nullable=True)
     knows_restock_delay = Column(Boolean, nullable=True)  # La pharmacie a-t-elle informé du délai ?
@@ -102,6 +116,45 @@ class PatientTreatment(Base):
     restock_delay_precise = Column(String, nullable=True)  # Délai précis si fourni (ex: "2-3 jours")
     action_when_delay_unknown = Column(String, nullable=True)  # Action si délai imprécis/inconnu
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    medication_category = relationship("MedicationCategory")
+    unlisted_medication_submission = relationship(
+        "UnlistedMedicationSubmission",
+        back_populates="treatment",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+
+
+class UnlistedMedicationSubmission(Base):
+    """Patient-provided medication names awaiting professional review."""
+    __tablename__ = "unlisted_medication_submissions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    treatment_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("patient_treatments.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    medication_name = Column(String, nullable=False)
+    category_id = Column(
+        String,
+        ForeignKey("medication_categories.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    country = Column(String, nullable=False)
+    location = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="pending_validation", server_default="pending_validation")
+    submitted_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    treatment = relationship(
+        "PatientTreatment",
+        back_populates="unlisted_medication_submission",
+    )
+    category = relationship("MedicationCategory")
 
 
 class PatientEmailChallenge(Base):

@@ -18,13 +18,13 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
-if ! command -v docker-compose &> /dev/null; then
-    echo "❌ Docker Compose n'est pas installé."
+if ! docker compose version &> /dev/null; then
+    echo "❌ Docker Compose v2 n'est pas installé."
     exit 1
 fi
 
 echo "✅ Docker trouvé: $(docker --version)"
-echo "✅ Docker Compose trouvé: $(docker-compose --version)"
+echo "✅ Docker Compose trouvé: $(docker compose version --short)"
 echo ""
 
 # Vérifier .env
@@ -44,7 +44,7 @@ echo ""
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo ""
     echo "🐳 Lancement des containers..."
-    docker-compose up -d
+    docker compose up -d
     
     # Attendre que l'API soit prête
     echo ""
@@ -52,30 +52,37 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     sleep 5
     
     # Vérifier la santé
+    API_READY=0
     for i in {1..30}; do
-        if curl -s http://localhost:8000/health > /dev/null 2>&1; then
+        if curl -s http://localhost:3003/health > /dev/null 2>&1; then
+            API_READY=1
             echo "✅ API prête!"
             break
         fi
         echo "  Tentative $i/30..."
         sleep 2
     done
+
+    if [ "$API_READY" -ne 1 ]; then
+        echo "❌ L'API n'a pas démarré. Derniers logs :"
+        docker compose logs --tail=100 api
+        exit 1
+    fi
     
     echo ""
     echo "🎉 Succès! Ouvre les URLs:"
-    echo "   📍 API:       http://localhost:8000"
-    echo "   📖 Docs:      http://localhost:8000/docs"
+    echo "   📍 API:       http://localhost:3003"
+    echo "   📖 Docs:      http://localhost:3003/docs"
     echo "   🗄️  Database:  postgresql://postgres:postgres@localhost:5432/move4epilepsy"
     echo ""
     echo "📝 Logs:"
-    echo "   docker-compose logs -f api      # Logs API"
-    echo "   docker-compose logs -f db       # Logs DB"
+    echo "   docker compose logs -f api      # Logs API"
     echo ""
     echo "⛔ Arrêter:"
-    echo "   docker-compose down"
+    echo "   docker compose down"
     echo ""
 else
     echo "ℹ️  Pour démarrer manuellement:"
-    echo "   docker-compose up -d"
+    echo "   docker compose up -d api"
     exit 0
 fi

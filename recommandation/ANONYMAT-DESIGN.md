@@ -342,6 +342,17 @@ tests/api/test_patients.py:
 - ✅ `get_current_user` in `app/core/dependencies.py`
 - ✅ Admin role setup in user model
 
+### Recommandation : service d'e-mails transactionnels
+
+MakiSend (<https://makisend.lixalistudio.tech/>) est une option à évaluer pour l'envoi des codes de vérification et des alertes patient. Sa présentation le décrit comme une API transactionnelle open source, auto-hébergée sur Cloudflare Workers, avec gestion de serveurs SMTP, journaux, reprises et modèles. MakiSend s'appuie sur un fournisseur SMTP distinct pour la délivrabilité : ce n'est donc pas, à lui seul, un hébergeur de messagerie.
+
+**Aucune décision d'hébergeur ou de fournisseur SMTP n'est prise à ce stade.** Avant de retenir cette option, vérifier :
+- si un relais SMTP compatible permet de l'utiliser avec l'envoi SMTP actuel de `app/core/email.py`, ou si une intégration API dédiée est nécessaire ;
+- où sont hébergés et combien de temps sont conservés les journaux, modèles et données de destinataires ;
+- la gestion des secrets, les limites de débit, les reprises, la disponibilité et les coûts de MakiSend et du fournisseur SMTP associé.
+
+Les messages patient doivent rester génériques et ne jamais inclure de médicament, dosage, diagnostic ou autre détail de santé. Ne pas intégrer MakiSend ni configurer un fournisseur avant le choix explicite de l'hébergement et la validation de ces points.
+
 ### À Vérifier
 ```bash
 # Vérifier que `require_admin` existe
