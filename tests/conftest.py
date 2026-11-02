@@ -78,6 +78,7 @@ def test_user(db_session):
         is_active=True,
     )
     db_session.add(user)
+    db_session.flush()
     
     profile = UserProfile(
         user_id=user.id,
@@ -102,6 +103,7 @@ def test_admin(db_session):
         is_superuser=True,
     )
     db_session.add(user)
+    db_session.flush()
     
     profile = UserProfile(
         user_id=user.id,
