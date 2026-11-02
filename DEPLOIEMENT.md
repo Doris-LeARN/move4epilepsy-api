@@ -105,6 +105,9 @@ healthcheck et le reverse proxy pour exposer l’API en HTTPS.
 
 Depuis la racine du dépôt `move4epilepsy-frontend` :
 
+Le guide détaillé du frontend se trouve dans `DEPLOIEMENT.md` à la racine du
+dépôt `move4epilepsy-frontend`.
+
 ```bash
 docker compose --env-file "$FRONTEND_ENV_FILE" config --quiet
 docker compose --env-file "$FRONTEND_ENV_FILE" up -d --build
